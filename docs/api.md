@@ -122,6 +122,8 @@ Liste **uniquement** les instances de l'utilisateur courant.
     "expires_at": "2026-09-24T18:30:00Z", "worker": "worker1" }
 ]
 ```
+> **Note** — `expires_at` n'est **pas** une colonne de la table `instances` : il est **dérivé de
+> `rentals.end_time`** (la table `instances` du sujet n'a pas de date d'expiration). Voir `docs/db.md`.
 
 ### `POST /instances/{id}/stop` — *propriétaire*
 Arrêt anticipé d'une instance : conteneur détruit, rental passé `CANCELLED`.
@@ -149,6 +151,9 @@ demande le conteneur à l'agent.
   "ssh_command": "ssh user@192.168.56.11 -p 20012",
   "expires_at": "2026-09-24T18:30:00Z" }
 ```
+> **Note** — `expires_at` renvoyé ici correspond à `rentals.end_time` (calculé à partir de
+> `duration_minutes`), pas à un champ de `instances`.
+
 - **`400`** : `distribution_id` ou `duration_minutes` manquant / invalide.
 - **`404`** : distribution inconnue ou `disabled`.
 - **`503`** : `{ "error": "worker_unavailable" }` — aucun worker `AVAILABLE`.
@@ -200,9 +205,11 @@ Signal de vie périodique (toutes les 10 s) + charge.
 
 *(Côté Flask : un worker sans heartbeat depuis > 30 s passe `OFFLINE` — logique de S7.)*
 
-### `GET /admin/monitoring` — *admin* — **(S10)**
+### `GET /admin/monitoring` — *admin* — **(S10)** — *extension d'équipe*
 Dashboard de supervision : instances actives, état + dernier heartbeat de chaque worker, santé
 des services. **`200`** (HTML ou JSON selon l'implémentation retenue en S10).
+> **Note** — Route **non exigée nommément** par le sujet, qui parle seulement d'un « dashboard de
+> supervision » (séance 10). C'est une extension de notre équipe ; le nom de route peut changer.
 
 ---
 
