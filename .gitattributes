@@ -1,0 +1,7 @@
+# Normalisation des fins de ligne — évite les CRLF Windows sur les fichiers Linux
+* text=auto eol=lf
+*.sh   text eol=lf
+*.yml  text eol=lf
+*.yaml text eol=lf
+*.ini  text eol=lf
+*.cfg  text eol=lf

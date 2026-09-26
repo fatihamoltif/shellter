@@ -1,0 +1,18 @@
+---
+# Variables communes à toutes les VM Shellter — Séance S2 (P4)
+
+# --- Connexion SSH ---
+ansible_user: vagrant
+ansible_python_interpreter: /usr/bin/python3
+ansible_ssh_common_args: "-o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null -o ConnectTimeout=10"
+
+# Clé privée SSH utilisée pour joindre les VM.
+# PRÉREQUIS Vagrantfile (à coordonner avec P1/P2/P3) :
+#   config.ssh.insert_key = false
+# → toutes les VM partagent la clé "insecure" de Vagrant, et une seule clé suffit ici.
+# Sinon, définir la clé par hôte dans ansible/host_vars/<worker>.yml :
+#   ansible_ssh_private_key_file: .vagrant/machines/<worker>/virtualbox/private_key
+ansible_ssh_private_key_file: "{{ lookup('env', 'HOME') }}/.vagrant.d/insecure_private_key"
+
+# --- Réseau (rappel, source de vérité = docs/architecture.md) ---
+private_network_cidr: "192.168.56.0/24"
