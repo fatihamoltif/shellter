@@ -1,10 +1,11 @@
-# Guide — Tester mon rendu S2 avec WSL
+# Guide — Tester le projet avec Vagrant + Ansible (WSL)
 
 > **Auteur : Jamai Ali (P4)** · Séance S2 — Inventaire Ansible & vérification réseau
 >
-> Ce guide explique, pas à pas, **comment prouver que mon travail de la S2 fonctionne**, et
-> surtout **pourquoi** on fait chaque étape. Il est écrit pour moi (et pour toute personne du
-> groupe qui voudra rejouer le test sans explication orale — c'est la « preuve attendue » de la S2).
+> Ce guide explique, pas à pas, **comment tester le projet de bout en bout** (créer l'infra avec
+> Vagrant, puis vérifier qu'Ansible joint les machines), et surtout **pourquoi** on fait chaque
+> étape. Il est écrit pour être rejoué par n'importe qui du groupe **sans explication orale** —
+> c'est la « preuve attendue » de la S2.
 
 ---
 
@@ -18,165 +19,159 @@ Mon livrable S2 est composé de :
 
 La **preuve officielle** demandée par la prof est : **`ansible all -m ping` réussit** sur les 4 machines.
 
-On va valider ça en **deux niveaux** :
+On valide en **deux niveaux** :
 - **Niveau 1 — sans VM** : vérifier que l'inventaire est bien écrit (groupes + variables corrects).
-  Ça se fait tout de suite, ça prouve que *mon* fichier est bon.
-- **Niveau 2 — avec les VM** : le vrai `ansible all -m ping`, quand l'infrastructure Vagrant tourne.
+- **Niveau 2 — avec les VM** : créer l'infra avec Vagrant, puis le vrai `ansible all -m ping`.
 
 ---
 
-## 2. Pourquoi WSL ?
+## 2. Les outils et leur rôle
 
-**Ansible ne fonctionne pas sous Windows** (le « control node » qui pilote les machines doit être un
-Linux). **WSL** (*Windows Subsystem for Linux*) est un vrai Ubuntu intégré à Windows : c'est la
-manière la plus simple d'avoir Ansible sur un PC Windows, sans machine virtuelle séparée.
+| Outil | Rôle | Où il tourne |
+|---|---|---|
+| **VirtualBox** | le moteur qui fait tourner les VM | Windows |
+| **Vagrant** | crée/démarre les 4 VM à partir du `Vagrantfile` | Windows |
+| **Ansible** | se connecte en SSH aux VM et les configure | Linux (**WSL**) |
+| **WSL** (Ubuntu) | un vrai Linux intégré à Windows, pour lancer Ansible | Windows |
 
-> 💡 À retenir : on tape les commandes **Windows** dans PowerShell, et les commandes **Linux**
-> (`ansible`, `sudo`, `apt`…) dans **Ubuntu (WSL)**. Ne pas mélanger les deux.
+> 💡 À retenir : les commandes **Vagrant** se lancent dans **PowerShell** (Windows) ; les commandes
+> **Ansible** se lancent dans **Ubuntu (WSL)**. Ne pas mélanger les deux.
 
 ---
 
-## 3. Préparation (une seule fois)
+## 3. Installation (une seule fois)
 
-### 3.1 Entrer dans Ubuntu
-Dans **PowerShell**, tape :
+### 3.1 VirtualBox + Vagrant (dans PowerShell)
+```powershell
+winget install Oracle.VirtualBox     # le moteur de VM (si pas déjà installé)
+winget install Hashicorp.Vagrant     # l'outil Vagrant
+```
+⚠️ **Après l'installation de Vagrant, ferme et rouvre PowerShell** (sinon la commande `vagrant`
+n'est pas encore reconnue). Vérifie :
+```powershell
+vagrant --version        # doit afficher "Vagrant 2.4.x"
+```
+
+### 3.2 WSL + Ansible (dans Ubuntu)
+Entre dans Ubuntu depuis PowerShell :
 ```powershell
 wsl
 ```
-L'invite change (ex. `jamai@AsusRogAli:...$`). **À partir de là, tu es dans Linux.**
-*(Si tu revois une erreur du type « `&&` n'est pas un séparateur valide », c'est que tu es ressorti
-dans PowerShell : retape `wsl`.)*
-
-### 3.2 Installer Ansible (dans Ubuntu)
+Ton invite change (ex. `jamai@AsusRogAli:...$`) → **tu es dans Linux**. Installe Ansible :
 ```bash
 sudo apt update
 sudo apt install -y ansible
-ansible --version      # vérifie que c'est bien installé
+ansible --version
 ```
-**Pourquoi** : `apt` est le gestionnaire de paquets d'Ubuntu ; il télécharge et installe Ansible.
 
 ---
 
-## 4. Niveau 1 — Tester l'inventaire SANS VM (tout de suite)
+## 4. Niveau 1 — Tester l'inventaire SANS VM (rapide)
 
-Ce niveau vérifie que mon `hosts.ini` et mes `group_vars/` sont **bien structurés** : Ansible arrive
-à les lire, les groupes sont bons, et chaque machine a les bonnes variables. **Aucune VM requise**,
-car on ne fait que *lire* l'inventaire, on ne se connecte à rien.
+Vérifie que `hosts.ini` et `group_vars/` sont bien structurés. **Aucune VM requise** : on ne fait que
+*lire* l'inventaire.
 
-### 4.1 Aller dans le dossier ansible
 ```bash
 cd /mnt/c/Users/jamai/OneDrive/Desktop/shellter-push/ansible
-```
-**Pourquoi `/mnt/c/...`** : depuis Ubuntu, le disque `C:` de Windows est monté sous `/mnt/c`. C'est
-le même dossier que dans l'explorateur Windows, vu depuis Linux.
 
-### 4.2 Afficher la structure de l'inventaire
-```bash
+# 1. la structure des groupes
 ansible-inventory -i hosts.ini --graph
-```
-**Ce que ça fait** : dessine l'arbre des groupes et des machines lus dans `hosts.ini`.
-**Résultat attendu** :
-```
-@all:
-  |--@ungrouped:
-  |--@shellter:
-  |  |--@controller:
-  |  |  |--controller
-  |  |--@workers:
-  |  |  |--worker1
-  |  |  |--worker2
-  |  |  |--worker3
-```
-✅ Si tu vois les groupes `controller` et `workers` avec les 4 machines, **la structure est bonne**.
+# attendu :
+#   @all:
+#     |--@shellter:
+#     |  |--@controller:
+#     |  |  |--controller
+#     |  |--@workers:
+#     |  |  |--worker1 / worker2 / worker3
 
-### 4.3 Vérifier les variables d'une machine
-```bash
-ansible-inventory -i hosts.ini --host worker1
-```
-**Ce que ça fait** : affiche toutes les variables qu'Ansible associe à `worker1` (celles de
-`group_vars/all/` + celles de `group_vars/workers.yml`).
-**Résultat attendu** (extrait) :
-```json
-{
-    "ansible_host": "192.168.56.11",
-    "ansible_user": "vagrant",
-    "agent_port": 5000,
-    "worker_max_instances": 10,
-    "ssh_port_range_start": 20000,
-    "ssh_port_range_end": 30000
-}
-```
-✅ La bonne IP (`.11` pour worker1, `.12` pour worker2, `.13` pour worker3) et les variables
-attendues → **les group_vars sont bien pris en compte**. Refais-le avec `worker2` et `worker3`.
+# 2. les variables d'une machine (bonne IP + vars)
+ansible-inventory -i hosts.ini --host worker1     # ansible_host=192.168.56.11, agent_port=5000...
 
-### 4.4 Vérifier que le script réseau est correct
-```bash
+# 3. la syntaxe du script réseau
 bash -n ../scripts/check_network.sh && echo "script OK"
 ```
-**Ce que ça fait** : `bash -n` lit le script **sans l'exécuter** et signale toute erreur de syntaxe.
-✅ Affiche `script OK` = le script est syntaxiquement valide.
+
+> **Pourquoi `/mnt/c/...`** : depuis Ubuntu, le disque `C:` de Windows est monté sous `/mnt/c`.
 
 ---
 
-## 5. Les 2 warnings que tu vas voir (et pourquoi ils sont normaux)
+## 5. Niveau 2 — Le vrai test avec les VM (la preuve S2)
+
+### 5.1 Démarrer les 4 VM (dans PowerShell)
+```powershell
+cd C:\Users\jamai\OneDrive\Desktop\shellter-push
+vagrant up          # 1re fois : long (télécharge Ubuntu + crée les 4 VM)
+vagrant status      # control + worker1/2/3 doivent être "running (virtualbox)"
+```
+**Pourquoi** : `vagrant up` lit le `Vagrantfile` et crée les 4 machines (control `192.168.56.10`,
+worker1/2/3 en `.11/.12/.13`), avec `config.ssh.insert_key = false` → toutes partagent la même clé SSH.
+
+### 5.2 Préparer la clé SSH dans WSL (dans Ubuntu)
+L'inventaire cherche la clé « insecure » de Vagrant dans `~/.vagrant.d/`. On la copie depuis Windows
+avec les bonnes permissions (SSH refuse une clé trop ouverte) :
+```bash
+mkdir -p ~/.vagrant.d
+cp /mnt/c/Users/jamai/.vagrant.d/insecure_private_key ~/.vagrant.d/insecure_private_key
+chmod 600 ~/.vagrant.d/insecure_private_key
+```
+> **Pourquoi** : Vagrant tourne côté Windows, la clé est sous `C:\Users\jamai\.vagrant.d\`. Ansible
+> tourne côté WSL et lit `~/.vagrant.d/` : on aligne les deux en copiant la clé (et `chmod 600`
+> sinon SSH la rejette comme « unprotected »).
+
+### 5.3 Lancer `ansible all -m ping` (dans Ubuntu) 🎯
+```bash
+cd /mnt/c/Users/jamai/OneDrive/Desktop/shellter-push/ansible
+ansible all -i hosts.ini -m ping
+```
+**Résultat attendu — la preuve S2 :**
+```
+controller | SUCCESS => { "changed": false, "ping": "pong" }
+worker1    | SUCCESS => { "changed": false, "ping": "pong" }
+worker2    | SUCCESS => { "changed": false, "ping": "pong" }
+worker3    | SUCCESS => { "changed": false, "ping": "pong" }
+```
+**Pourquoi** : le module `ping` d'Ansible se connecte en SSH à chaque VM et vérifie que Python
+répond. **4 × `SUCCESS` / `pong`** = l'inventaire ET la connexion SSH fonctionnent → **objectif S2 atteint.**
+
+### 5.4 Vérifier le réseau entre toutes les VM (dans Ubuntu)
+```bash
+bash ../scripts/check_network.sh
+```
+**Résultat attendu** : ping + SSH du poste vers les 4 VM, puis connectivité entre les 12 paires de
+VM, tous en `OK`, et pour finir : **`✅ Tous les tests réseau sont PASSÉS.`**
+
+### 5.5 Arrêter les VM quand tu as fini (dans PowerShell)
+Les 4 VM consomment de la RAM. Pour les éteindre sans les supprimer :
+```powershell
+cd C:\Users\jamai\OneDrive\Desktop\shellter-push
+vagrant halt          # éteint les VM (relançables avec vagrant up)
+# vagrant destroy -f  # (optionnel) supprime tout ; se recrée avec vagrant up
+```
+
+---
+
+## 6. Les 2 warnings normaux (à ignorer)
 
 ### ⚠️ « Ansible is being run in a world writable directory … ignoring ansible.cfg »
-**Cause** : on travaille sur `/mnt/c` (disque Windows). Pour Linux, ce dossier est « accessible en
-écriture par tout le monde », et par **sécurité** Ansible refuse d'y lire le `ansible.cfg` (un cfg
-malveillant pourrait exécuter n'importe quoi). Ce n'est **pas** une erreur de mon travail.
-
-**Comment l'éviter** (optionnel) — copier le projet dans le système de fichiers Linux :
-```bash
-cp -r /mnt/c/Users/jamai/OneDrive/Desktop/shellter-push ~/shellter
-cd ~/shellter/ansible
-ansible-inventory --graph     # ici, plus besoin de -i, le ansible.cfg est lu
-```
-> C'est aussi **plus rapide** : Ansible sur `/mnt/c` est lent (accès disque Windows depuis Linux).
+On travaille sur `/mnt/c` (disque Windows), qu'Ansible juge « accessible en écriture par tous » et
+refuse d'y lire `ansible.cfg` par sécurité. C'est pour ça qu'on passe `-i hosts.ini` à la main. Pas
+une erreur de mon travail. (Pour t'en débarrasser : copier le projet dans `~` côté Linux.)
 
 ### ⚠️ « Found both group and host with same name: controller »
-**Cause** : le **groupe** s'appelle `[controller]` et la **machine** aussi `controller`. Ansible le
-signale mais ça fonctionne (on garde ce nom car c'est celui du sujet de la prof, page 9). Bénin.
-
----
-
-## 6. Niveau 2 — Le vrai test avec les VM (quand l'infra tourne)
-
-Ce niveau nécessite que le `Vagrantfile` de l'équipe existe et que les VM démarrent. C'est la
-**preuve finale** de la S2.
-
-```bash
-# à la racine du dépôt (côté Windows ou WSL selon où tourne Vagrant)
-vagrant up            # démarre les 4 VM
-vagrant status        # doit montrer 4 VM "running"
-
-cd ansible
-ansible all -m ping   # 🎯 LA PREUVE : chaque machine répond "pong" (SUCCESS)
-
-bash ../scripts/check_network.sh   # ping + SSH entre toutes les VM -> tout OK
-```
-**Pourquoi `ansible all -m ping`** : le module `ping` d'Ansible se connecte en SSH à chaque machine
-et vérifie que Python y répond. Si les 4 répondent `SUCCESS`, ça prouve que l'inventaire **et** la
-connexion SSH fonctionnent → objectif S2 atteint.
-
-> ⚠️ **Prérequis à rappeler à l'équipe** : le `Vagrantfile` doit contenir
-> `config.ssh.insert_key = false`, sinon chaque VM a une clé SSH différente et l'inventaire ne peut
-> pas toutes les joindre avec une seule clé.
->
-> ⚠️ **Réseau WSL** : WSL2 est sur un réseau NAT ; joindre des VM VirtualBox/VMware en
-> `192.168.56.x` depuis WSL peut échouer. Dans ce cas, lancer `ansible all -m ping` **depuis la VM
-> controller** (`vagrant ssh controller`) plutôt que depuis WSL.
+Le **groupe** `[controller]` et la **machine** `controller` portent le même nom. Bénin ; on garde ce
+nom car c'est celui du sujet de la prof (page 9).
 
 ---
 
 ## 7. Récapitulatif (checklist)
 
-| Test | Commande | VM requises ? | Preuve |
-|---|---|---|---|
-| Structure de l'inventaire | `ansible-inventory -i hosts.ini --graph` | ❌ | 2 groupes + 4 machines |
-| Variables d'un hôte | `ansible-inventory -i hosts.ini --host worker1` | ❌ | bonne IP + variables |
-| Syntaxe du script | `bash -n ../scripts/check_network.sh` | ❌ | `script OK` |
-| **Connexion réelle** | `ansible all -m ping` | ✅ | `SUCCESS` × 4 |
-| Réseau inter-VM | `bash ../scripts/check_network.sh` | ✅ | tout en `OK` |
+| Test | Commande | VM requises ? | Preuve | Statut |
+|---|---|---|---|---|
+| Structure de l'inventaire | `ansible-inventory -i hosts.ini --graph` | ❌ | 2 groupes + 4 machines | ✅ validé |
+| Variables d'un hôte | `ansible-inventory -i hosts.ini --host worker1` | ❌ | bonne IP + variables | ✅ validé |
+| Syntaxe du script | `bash -n ../scripts/check_network.sh` | ❌ | `script OK` | ✅ validé |
+| **Connexion réelle** | `ansible all -i hosts.ini -m ping` | ✅ | `SUCCESS` × 4 | ✅ **validé sur infra Vagrant** |
+| Réseau inter-VM | `bash ../scripts/check_network.sh` | ✅ | tout en `OK` | ✅ **validé sur infra Vagrant** |
 
-**Aujourd'hui, sans VM**, les 3 premiers tests suffisent à prouver que mon rendu S2 est correct.
-Les 2 derniers se valideront en séance, une fois l'infrastructure Vagrant en place.
+**Prérequis à rappeler à l'équipe** : le `Vagrantfile` doit contenir `config.ssh.insert_key = false`,
+sinon chaque VM a une clé SSH différente et l'inventaire ne peut pas toutes les joindre.
