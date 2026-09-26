@@ -1,0 +1,15 @@
+---
+# Variables du groupe [workers] — Séance S2 (P4)
+# Chaque worker fait tourner Docker Engine + le Worker Agent (register + heartbeat).
+
+role: worker
+
+# Port de l'API interne du Worker Agent (appelée par Flask, protégée par token)
+agent_port: 5000
+
+# Capacité par défaut ; le Resource Manager peut la surcharger par hôte (host_vars/)
+worker_max_instances: 10
+
+# Plage de ports hôte réservée aux conteneurs SSH loués (voir docs/architecture.md)
+ssh_port_range_start: 20000
+ssh_port_range_end: 30000
