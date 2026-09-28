@@ -1,87 +1,58 @@
-# Installation de Docker - Environnement S3
+## Shellter - Plateforme de location d'environnements Linux
 
-## Explication S3
+## Présentation du projet
 
-Dans le cadre de notre projet Shellter et de nos travaux pour ce semestre S3, nous utilisons Docker pour créer et gérer de manière rapide, légère et isolée des environnements Linux pour nos utilisateurs. Il est essentiel que nous disposions d'une configuration identique sur l'ensemble de nos machines (Noah, Aziz, Isselmou et Youssef) afin de garantir la reproductibilité de nos déploiements et d'éviter les problèmes de compatibilité entre nos environnements de développement et nos Workers. Ce guide détaille l'installation standardisée et sécurisée requise.
+Dans le cadre de ce projet, nous cherchons à répondre à un besoin simple : permettre à un utilisateur d'accéder rapidement et temporairement à un environnement Linux sans avoir à installer lui-même une nouvelle distribution sur sa machine.
 
-## Prérequis
+L'idée est donc de proposer une application web depuis laquelle un utilisateur peut choisir une distribution, par exemple Ubuntu ou Debian, ainsi qu'une durée de location. Le système crée ensuite automatiquement un environnement Linux isolé auquel l'utilisateur peut accéder en SSH.
 
-Avant de procéder à l'installation, assurez-vous de respecter les conditions suivantes :
-- **Système d'exploitation** : Une distribution Linux basée sur Debian ou Ubuntu (les commandes sont prévues pour ces systèmes).
-- **Privilèges d'administration** : Vous devez avoir accès aux droits d'administration (pouvoir exécuter des commandes avec `sudo`).
-- **Paquets de base** : Disposer d'une connexion internet active et d'un système à jour.
+Nous avons choisi d'utiliser des conteneurs Docker afin de créer ces environnements de manière rapide, légère et reproductible.
 
-## Nettoyage préalable
+---
 
-Pour éviter tout conflit lors de l'installation, il est impératif de désinstaller proprement les anciennes versions non officielles de Docker (`docker.io`, `docker-engine`, etc.).
+## Problématique
 
-Exécutez la commande suivante :
+Le problème ne consiste pas seulement à lancer un conteneur Docker.
 
-```bash
-sudo apt-get remove -y docker docker-engine docker.io containerd runc
-```
-*(Note : Il est tout à fait normal que la commande vous indique que certains de ces paquets ne sont pas installés).*
+Il faut également répondre à plusieurs questions :
 
-## Installation pas à pas
+- comment permettre à plusieurs utilisateurs de demander des environnements en parallèle ?
+- comment savoir quel conteneur appartient à quel utilisateur ?
+- comment gérer automatiquement la durée de vie d'une location ?
+- comment éviter de configurer manuellement chaque machine ?
+- comment réagir si une machine hébergeant des conteneurs devient indisponible ?
+- comment rendre l'ensemble reproductible sur une autre machine ?
 
-### 1. Configuration du dépôt officiel
+Notre objectif est donc de construire une plateforme capable de gérer automatiquement le cycle de vie complet d'une location.
 
-Mettez à jour votre index de paquets et installez les dépendances nécessaires pour permettre à `apt` d'utiliser un dépôt via HTTPS :
+---
 
-```bash
-sudo apt-get update
-sudo apt-get install -y ca-certificates curl gnupg lsb-release
-```
+## Solution proposée
 
-Ajoutez la clé GPG officielle de Docker :
+Nous séparons le projet en deux grandes parties :
 
-```bash
-sudo mkdir -p /etc/apt/keyrings
-curl -fsSL https://download.docker.com/linux/ubuntu/gpg | sudo gpg --dearmor -o /etc/apt/keyrings/docker.gpg
-```
+### 1. Le plan de contrôle
 
-Configurez ensuite le repository stable :
+Le plan de contrôle contient les composants qui prennent les décisions et mémorisent l'état du système.
 
-```bash
-echo \
-  "deb [arch=$(dpkg --print-architecture) signed-by=/etc/apt/keyrings/docker.gpg] https://download.docker.com/linux/ubuntu \
-  $(lsb_release -cs) stable" | sudo tee /etc/apt/sources.list.d/docker.list > /dev/null
-```
+Il comprend :
 
-### 2. Installation des paquets nécessaires
+- **Flask**, qui fournit l'application web et reçoit les demandes des utilisateurs ;
+- **PostgreSQL**, qui conserve les informations sur les utilisateurs, les locations et les Workers ;
+- un **Provisioner**, chargé de créer et supprimer les conteneurs ;
+- un **Watchdog**, chargé de surveiller les expirations et les éventuelles pannes.
 
-Une fois le dépôt ajouté, mettez de nouveau à jour l'index des paquets et installez Docker CE, le CLI, containerd et Docker Compose :
+### 2. Le plan d'exécution
 
-```bash
-sudo apt-get update
-sudo apt-get install -y docker-ce docker-ce-cli containerd.io docker-compose-plugin
-```
+Le plan d'exécution correspond aux machines qui exécutent réellement les environnements Linux.
 
-## Configuration post-installation
+Ces machines sont appelées des **Workers**.
 
-Par défaut, l'utilisation de Docker nécessite les droits d'administration (`sudo`). Pour qu'un utilisateur standard puisse exécuter des commandes Docker (nécessaire pour nos scripts de déploiement et notre confort), il faut l'ajouter au groupe `docker`.
+Chaque Worker possède Docker et peut héberger plusieurs conteneurs utilisateurs.
 
-1. Créez le groupe `docker` (il est généralement créé par défaut lors de l'installation) :
-   ```bash
-   sudo groupadd docker
-   ```
+Par exemple :
 
-2. Ajoutez votre utilisateur au groupe `docker` :
-   ```bash
-   sudo usermod -aG docker $USER
-   ```
-
-3. Appliquez les modifications sans avoir à vous déconnecter en exécutant :
-   ```bash
-   newgrp docker
-   ```
-
-## Validation
-
-Pour s'assurer que l'installation et les permissions fonctionnent correctement, lancez un conteneur de test (sans utiliser `sudo`) :
-
-```bash
-docker run hello-world
-```
-
-Si le message **"Hello from Docker!"** s'affiche, cela signifie que votre installation est propre, sécurisée et prête pour nos déploiements du S3 !
+Worker 1
+├── Conteneur Ubuntu - utilisateur A
+├── Conteneur Ubuntu - utilisateur B
+└── Conteneur Debian - utilisateur C
