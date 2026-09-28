@@ -26,7 +26,9 @@ jobs:
           --health-retries 5
 
     env:
-      DATABASE_URL: postgresql://shellter:shellter@localhost:5432/shellter_test
+      # 127.0.0.1 (pas "localhost") : sur le runner, localhost peut resoudre en IPv6 (::1)
+      # ou le service Postgres n'ecoute pas -> echec de connexion.
+      DATABASE_URL: postgresql://shellter:shellter@127.0.0.1:5432/shellter_test
 
     steps:
       - name: Récupérer le code
