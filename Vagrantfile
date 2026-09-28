@@ -1,8 +1,19 @@
+# Vagrantfile — Shellter
+# Base importée depuis la branche de Fatiha (commit cae8254) pour permettre le test
+# d'inventaire (ansible all -m ping).
+#
+# AJOUT P4 : config.ssh.insert_key = false
+#   -> toutes les VM partagent la clé "insecure" de Vagrant. C'est le prérequis
+#      supposé par l'inventaire Ansible (ansible/group_vars/all/main.yml), qui
+#      utilise une seule clé pour joindre les 4 machines.
+#   -> à répercuter dans la version de Fatiha lors de la fusion des branches.
+
 Vagrant.configure("2") do |config|
+  config.vm.box = "ubuntu/jammy64"
+  config.ssh.insert_key = false
   config.vm.synced_folder ".", "/vagrant", disabled: true
 
   config.vm.define "control" do |control|
-    control.vm.box = "ubuntu/jammy64"
     control.vm.hostname = "shellter-control"
     control.vm.network "private_network", ip: "192.168.56.10"
     control.vm.network "forwarded_port", guest: 80, host: 8080
@@ -13,15 +24,14 @@ Vagrant.configure("2") do |config|
     end
   end
 
-  config.vm.define "worker1" do |worker1|
-    worker1.vm.box = "bento/ubuntu-22.04" # Image Ubuntu optimisée pour VMware
-    worker1.vm.hostname = "worker1"
-    worker1.vm.network "private_network", ip: "192.168.56.11"
-    
-    worker1.vm.provider "vmware_desktop" do |v|
-      v.vmx["memsize"] = "1024"
-      v.vmx["numvcpus"] = "1"
+  (1..3).each do |i|
+    config.vm.define "worker#{i}" do |worker|
+      worker.vm.hostname = "worker#{i}"
+      worker.vm.network "private_network", ip: "192.168.56.#{10 + i}"
+      worker.vm.provider "virtualbox" do |vb|
+        vb.memory = 1024
+        vb.cpus = 1
+      end
     end
   end
-
 end
