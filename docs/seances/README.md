@@ -11,6 +11,7 @@ comment le tester, et la preuve obtenue.
 | [S4](S4-base-de-donnees.md) | Base de données | Seed + tests + pipeline CI | CI verte + run rouge | ✅ |
 | [S5](S5-authentification.md) | API Web : auth | Dashboard + CSRF + tests d'accès | CI verte (15 tests) | ✅ |
 | [S6](S6-location.md) | API Web : location | Resource Manager + `/rent` | CI verte (28 tests) | ✅ |
+| [S7](S7-resilience.md) | Résilience / HA | Reprise sur un autre worker | CI verte (33 tests) | ✅ |
 
 ## Documents de référence (hors journal)
 - Contrat d'API : [`docs/api.md`](../api.md)
