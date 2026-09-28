@@ -49,8 +49,11 @@ def create_app(config_name=None):
     # Blueprints
     from .auth import auth_bp
     from .dashboard import dashboard_bp
+    from .api import api_bp
     app.register_blueprint(auth_bp)
     app.register_blueprint(dashboard_bp)
+    app.register_blueprint(api_bp)
+    csrf.exempt(api_bp)   # API JSON (clients curl/agent) : pas de jeton CSRF de formulaire
 
     @app.route("/")
     def index():
