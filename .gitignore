@@ -1,0 +1,19 @@
+# Vagrant — état des VM et clés SSH générées (NE JAMAIS committer)
+.vagrant/
+
+# Python
+__pycache__/
+*.py[cod]
+venv/
+.venv/
+*.egg-info/
+
+# Environnement / secrets
+.env
+*.retry
+
+# Éditeurs / OS
+.DS_Store
+Thumbs.db
+.idea/
+.vscode/

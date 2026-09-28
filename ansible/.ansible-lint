@@ -1,0 +1,14 @@
+---
+# Configuration ansible-lint — Shellter (S3)
+profile: basic
+
+exclude_paths:
+  - .git/
+  - .github/
+  - ../tests/
+
+# Les rôles common / docker / ssh_hardening sont écrits par P1/P2/P3 :
+# on ne bloque pas si un rôle référencé n'est pas encore présent localement.
+skip_list:
+  - role-name
+  - var-naming[no-role-prefix]

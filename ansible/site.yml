@@ -1,0 +1,26 @@
+---
+# site.yml — Playbook maître Shellter (S3, P4)
+# Enchaîne les couches de configuration dans l'ordre : common -> docker -> ssh_hardening.
+#
+# Dépendances écrites par les autres membres en S3 :
+#   - rôle     common        (P1) : paquets, NTP, fuseau horaire, utilisateur applicatif shellter
+#   - playbook docker.yml    (P2) : Docker Engine + plugin Compose
+#   - rôle     ssh_hardening (P3) : root interdit, mot de passe désactivé, ufw, Vault
+#
+# Lancement :  cd ansible && ansible-playbook site.yml
+# Idempotence : une seconde exécution doit rester propre (changed=0).
+
+- name: Socle commun à toutes les VM
+  hosts: all
+  become: true
+  roles:
+    - common
+
+- name: Installation de Docker et Compose
+  ansible.builtin.import_playbook: docker.yml
+
+- name: Durcissement SSH et pare-feu
+  hosts: all
+  become: true
+  roles:
+    - ssh_hardening
