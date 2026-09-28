@@ -17,3 +17,7 @@ venv/
 Thumbs.db
 .idea/
 .vscode/
+
+# Tests / bases locales
+.pytest_cache/
+*.db
