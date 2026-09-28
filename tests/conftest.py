@@ -40,3 +40,22 @@ def client(app):
 def session(app):
     """Session SQLAlchemy prête à l'emploi (pour les tests de modèles de la S4)."""
     return db.session
+
+
+@pytest.fixture()
+def fake_agent(monkeypatch):
+    """Remplace l'appel réseau à l'agent par une réponse factice (S6/S7)."""
+    from app import agent_client
+
+    calls = {"created": 0, "deleted": 0}
+
+    def _create(worker, **kwargs):
+        calls["created"] += 1
+        return {"container_id": f"cont-{calls['created']}"}
+
+    def _delete(worker, container_id):
+        calls["deleted"] += 1
+
+    monkeypatch.setattr(agent_client, "create_container", _create)
+    monkeypatch.setattr(agent_client, "delete_container", _delete)
+    return calls

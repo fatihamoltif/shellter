@@ -41,23 +41,6 @@ def register_login(client, username, email):
                 follow_redirects=True)
 
 
-@pytest.fixture()
-def fake_agent(monkeypatch):
-    """Remplace l'appel réseau à l'agent par une réponse factice."""
-    calls = {"created": 0, "deleted": 0}
-
-    def _create(worker, **kwargs):
-        calls["created"] += 1
-        return {"container_id": f"cont-{calls['created']}"}
-
-    def _delete(worker, container_id):
-        calls["deleted"] += 1
-
-    monkeypatch.setattr(agent_client, "create_container", _create)
-    monkeypatch.setattr(agent_client, "delete_container", _delete)
-    return calls
-
-
 # --------------------------------------------------------------------------- #
 # Resource Manager (logique pure)
 # --------------------------------------------------------------------------- #
