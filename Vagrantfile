@@ -9,6 +9,7 @@ Vagrant.configure("2") do |config|
     control.vm.network "private_network", ip: "192.168.56.10"
     control.vm.network "forwarded_port", guest: 80, host: 8080
     control.vm.network "forwarded_port", guest: 443, host: 8443
+    control.vm.network "forwarded_port", guest: 22, host: 2222, host_ip: "0.0.0.0", id: "ssh"
     control.vm.provider "virtualbox" do |vb|
       vb.memory = 2048
       vb.cpus = 1
