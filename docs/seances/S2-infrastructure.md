@@ -64,41 +64,76 @@ Teste, et sort avec le code 0 seulement si **tout** passe :
 
 ---
 
-## 4. Comment tester (procédure complète)
+## 4. Comment tester (commandes exactes)
 
-### 4.1 Installation (une fois)
+> Convention : les blocs **[PowerShell]** se lancent dans PowerShell (Windows), les blocs **[WSL]**
+> se lancent dans Ubuntu (WSL). On passe de l'un à l'autre en tapant `wsl` dans PowerShell.
+
+### 4.0 Installation (une seule fois)
+**[PowerShell]** — le moteur de VM + Vagrant :
 ```powershell
-# PowerShell : le moteur de VM + Vagrant
 winget install Oracle.VirtualBox
-winget install Hashicorp.Vagrant     # puis rouvrir PowerShell
+winget install Hashicorp.Vagrant
+# puis FERMER et ROUVRIR PowerShell pour rafraîchir le PATH
+vagrant --version
 ```
+**[WSL]** — Ansible (dans Ubuntu, après avoir tapé `wsl`) :
 ```bash
-# WSL (Ubuntu) : Ansible
-sudo apt update && sudo apt install -y ansible
+sudo apt update
+sudo apt install -y ansible
 ```
 
-### 4.2 Niveau 1 — sans VM (valide la structure)
-```bash
-cd /mnt/c/.../shellter-push/ansible
-ansible-inventory -i hosts.ini --graph      # arbre des groupes
-ansible-inventory -i hosts.ini --host worker1   # variables + IP
-bash -n ../scripts/check_network.sh         # syntaxe du script
-```
-
-### 4.3 Niveau 2 — la vraie preuve (avec VM)
+### 4.1 Démarrer les VM
+**[PowerShell]**
 ```powershell
-vagrant up            # démarre les 4 VM
-vagrant status        # control + worker1/2/3 = running
+cd C:\Users\jamai\OneDrive\Desktop\shellter-push
+vagrant up            # 1re fois : long (télécharge Ubuntu + crée les 4 VM)
+vagrant status        # control + worker1/2/3 doivent être "running (virtualbox)"
 ```
-```bash
-# WSL : la clé SSH partagée doit être au bon endroit
-mkdir -p ~/.vagrant.d
-cp /mnt/c/Users/<user>/.vagrant.d/insecure_private_key ~/.vagrant.d/insecure_private_key
-chmod 600 ~/.vagrant.d/insecure_private_key
 
-cd /mnt/c/.../shellter-push/ansible
-ansible all -i hosts.ini -m ping            # 🎯 la preuve
+### 4.2 Entrer dans WSL et préparer la clé SSH (une seule fois)
+**[PowerShell]** → passer dans Ubuntu :
+```powershell
+wsl
+```
+**[WSL]** → copier la clé SSH partagée de Vagrant au bon endroit :
+```bash
+mkdir -p ~/.vagrant.d
+cp /mnt/c/Users/jamai/.vagrant.d/insecure_private_key ~/.vagrant.d/insecure_private_key
+chmod 600 ~/.vagrant.d/insecure_private_key
+```
+
+### 4.3 LA PREUVE : `ansible all -m ping`
+**[WSL]**
+```bash
+cd /mnt/c/Users/jamai/OneDrive/Desktop/shellter-push/ansible
+ansible all -i hosts.ini -m ping --ask-vault-pass
+# -> "Vault password:" : taper  azerty  (rien ne s'affiche à la saisie) puis Entrée
+```
+> ⚠️ **`--ask-vault-pass` est obligatoire** : le dossier `group_vars/all/` contient le `vault.yml`
+> chiffré (secrets de P3), qu'Ansible charge pour toute commande. Sans le mot de passe, erreur
+> *« Attempting to decrypt but no vault secrets found »*.
+
+### 4.4 Vérification réseau complète (n'a pas besoin du vault)
+**[WSL]**
+```bash
 bash ../scripts/check_network.sh
+```
+
+### 4.5 (Optionnel) Niveau 1 — valider la structure sans VM
+**[WSL]**
+```bash
+cd /mnt/c/Users/jamai/OneDrive/Desktop/shellter-push/ansible
+ansible-inventory -i hosts.ini --graph          # arbre des groupes
+ansible-inventory -i hosts.ini --host worker1   # IP + variables
+bash -n ../scripts/check_network.sh             # syntaxe du script
+```
+
+### 4.6 Arrêter les VM quand on a fini
+**[PowerShell]**
+```powershell
+cd C:\Users\jamai\OneDrive\Desktop\shellter-push
+vagrant halt          # éteint les VM (relançables avec vagrant up)
 ```
 
 ---
@@ -128,3 +163,7 @@ worker3    | SUCCESS => { "ping": "pong" }
   `controller` portent le même nom. Bénin ; conservé car conforme au sujet de la prof.
 - **Réseau WSL2** : WSL2 est en NAT ; ici il atteint bien le réseau host-only `192.168.56.x`. En cas
   d'échec, on lance Ansible depuis la VM `control` (même réseau que les workers).
+- **Vault requis depuis la S3** : le `vault.yml` chiffré (secrets de P3) étant dans `group_vars/all/`,
+  toute commande Ansible réclame `--ask-vault-pass` (mot de passe `azerty`), même un simple `ping`.
+  Erreur sinon : *« Attempting to decrypt but no vault secrets found »*. Le `check_network.sh`, lui,
+  n'utilise pas Ansible → pas de vault.
