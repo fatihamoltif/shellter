@@ -1,0 +1,12 @@
+{% extends "base.html" %}
+{% block title %}Connexion — Shellter{% endblock %}
+{% block content %}
+<h1>Connexion</h1>
+<form method="post" action="{{ url_for('auth.login') }}">
+  {{ form.hidden_tag() }}   {# jeton CSRF #}
+  {{ form.username.label }} {{ form.username() }}
+  {{ form.password.label }} {{ form.password() }}
+  {{ form.submit(class="btn") }}
+</form>
+<p>Pas de compte ? <a href="{{ url_for('auth.register') }}">Créer un compte</a></p>
+{% endblock %}

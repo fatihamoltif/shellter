@@ -1,0 +1,28 @@
+{% extends "base.html" %}
+{% block title %}Dashboard — Shellter{% endblock %}
+{% block content %}
+<h1>Bonjour, {{ user.username }}</h1>
+<p>Email : {{ user.email }}</p>
+
+<div style="margin: 16px 0;">
+  <a class="btn" href="#">Louer une instance</a>
+  <a class="btn" href="#">Accéder à mon instance</a>
+</div>
+
+<h2>Mes instances</h2>
+{% if instances %}
+  <ul>
+    {% for instance in instances %}
+      <li>{{ instance.distribution }} — {{ instance.status }} — expire le {{ instance.expires_at }}</li>
+    {% endfor %}
+  </ul>
+{% else %}
+  <p>Aucune instance pour le moment.</p>
+{% endif %}
+
+<form method="post" action="{{ url_for('auth.logout') }}" style="margin-top: 24px;">
+  {# hidden_tag indisponible ici : on insère le jeton CSRF manuellement #}
+  <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+  <button type="submit">Se déconnecter</button>
+</form>
+{% endblock %}
