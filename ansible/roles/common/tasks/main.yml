@@ -1,0 +1,33 @@
+---
+- name: Mettre a jour le cache apt
+  apt:
+    update_cache: yes
+    cache_valid_time: 3600
+
+- name: Installer les paquets communs
+  apt:
+    name:
+      - curl
+      - vim
+      - git
+      - htop
+      - net-tools
+      - chrony
+    state: present
+
+- name: Configurer le fuseau horaire
+  timezone:
+    name: Europe/Paris
+
+- name: S'assurer que chrony (NTP) est demarre et active
+  service:
+    name: chrony
+    state: started
+    enabled: yes
+
+- name: Creer l'utilisateur applicatif shellter
+  user:
+    name: shellter
+    shell: /bin/bash
+    create_home: yes
+    state: present

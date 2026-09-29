@@ -1,0 +1,9 @@
+---
+# Variables du groupe [controller] — Séance S2 (P4)
+# Le controller héberge la stack web via Docker Compose (Nginx, Flask, PostgreSQL).
+
+role: controller
+
+# Ports exposés par Nginx sur le controller (voir docs/architecture.md)
+http_port: 80
+https_port: 443

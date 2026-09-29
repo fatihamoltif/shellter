@@ -1,0 +1,182 @@
+from flask_sqlalchemy import SQLAlchemy
+from werkzeug.security import generate_password_hash, check_password_hash
+from datetime import datetime, timezone
+
+db = SQLAlchemy()
+
+class Worker(db.Model):
+    __tablename__ = "workers"
+
+    id = db.Column(db.Integer, primary_key=True)
+    hostname = db.Column(db.String(100), unique=True, nullable=False)
+    ip = db.Column(db.String(45), nullable=False)
+
+    status = db.Column(
+        db.String(20),
+        nullable=False,
+        default="AVAILABLE"
+    )
+
+    cpu = db.Column(db.Float)
+    memory = db.Column(db.Integer)
+    last_heartbeat = db.Column(db.DateTime(timezone=True))
+
+    max_instances = db.Column(db.Integer)
+    agent_url = db.Column(db.String(255))
+
+    instances = db.relationship(
+        "Instance",
+        back_populates="worker"
+    )
+
+    __table_args__ = (
+        db.CheckConstraint(
+            "status IN ('AVAILABLE', 'BUSY', 'OFFLINE')",
+            name="ck_workers_status"
+        ),
+    )
+
+
+class Instance(db.Model):
+    __tablename__ = "instances"
+
+    id = db.Column(db.Integer, primary_key=True)
+
+    container_id = db.Column(db.String(255))
+
+    worker_id = db.Column(
+        db.Integer,
+        db.ForeignKey("workers.id"),
+        nullable=False
+    )
+
+    distribution_id = db.Column(
+        db.Integer,
+        db.ForeignKey("distributions.id"),
+        nullable=False
+    )
+
+    ssh_port = db.Column(db.Integer)
+
+    status = db.Column(
+        db.String(20),
+        nullable=False,
+        default="pending"
+    )
+
+    created_at = db.Column(
+        db.DateTime(timezone=True),
+        nullable=False,
+        default=lambda: datetime.now(timezone.utc)
+    )
+
+    ssh_user = db.Column(db.String(100))
+    ssh_secret = db.Column(db.String(500))
+
+    worker = db.relationship(
+        "Worker",
+        back_populates="instances"
+    )
+
+    distribution = db.relationship("Distribution")
+
+    rentals = db.relationship(
+        "Rental",
+        back_populates="instance"
+    )
+
+    __table_args__ = (
+        db.CheckConstraint(
+            "status IN "
+            "('pending', 'creating', 'running', 'recovering', "
+            "'stopped', 'deleted', 'error')",
+            name="ck_instances_status"
+        ),
+    )
+
+
+class Rental(db.Model):
+    __tablename__ = "rentals"
+
+    id = db.Column(db.Integer, primary_key=True)
+
+    user_id = db.Column(
+        db.Integer,
+        db.ForeignKey("users.id"),
+        nullable=False
+    )
+
+    instance_id = db.Column(
+        db.Integer,
+        db.ForeignKey("instances.id"),
+        nullable=False
+    )
+
+    start_time = db.Column(
+        db.DateTime(timezone=True),
+        nullable=False,
+        default=lambda: datetime.now(timezone.utc)
+    )
+
+    end_time = db.Column(
+        db.DateTime(timezone=True),
+        nullable=False
+    )
+
+    status = db.Column(
+        db.String(20),
+        nullable=False,
+        default="ACTIVE"
+    )
+
+    user = db.relationship("User")
+
+    instance = db.relationship(
+        "Instance",
+        back_populates="rentals"
+    )
+
+    __table_args__ = (
+        db.CheckConstraint(
+            "status IN ('ACTIVE', 'EXPIRED', 'CANCELLED')",
+            name="ck_rentals_status"
+        ),
+    )
+
+
+
+class User(db.Model):
+    __tablename__ = 'users'
+
+    id = db.Column(db.Integer, primary_key=True)
+    # Contraintes d'unicité obligatoires pour éviter les doublons
+    username = db.Column(db.String(64), unique=True, nullable=False)
+    email = db.Column(db.String(120), unique=True, nullable=False)
+    password_hash = db.Column(db.String(256), nullable=False)
+    created_at = db.Column(db.DateTime, default=lambda: datetime.now(timezone.utc))
+
+    def set_password(self, password):
+        """Hache le mot de passe avant de l'enregistrer en base."""
+        self.password_hash = generate_password_hash(password)
+
+    def check_password(self, password):
+        """Vérifie si le mot de passe fourni correspond au hachage."""
+        return check_password_hash(self.password_hash, password)
+
+    def __repr__(self):
+        return f'<User {self.username}>'
+
+
+class Distribution(db.Model):
+    __tablename__ = 'distributions'
+
+    id = db.Column(db.Integer, primary_key=True)
+    name = db.Column(db.String(64), nullable=False)
+    docker_image = db.Column(db.String(128), nullable=False)
+    version = db.Column(db.String(32), nullable=False)
+    status = db.Column(db.String(32), default='enabled') # statuts possibles : enabled / disabled
+
+    def __repr__(self):
+        return f'<Distribution {self.name} {self.version}>'
+
+

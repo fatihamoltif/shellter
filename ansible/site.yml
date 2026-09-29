@@ -1,0 +1,13 @@
+---
+- name: Configuration de base (role common)
+  hosts: controller
+  become: yes
+  roles:
+    - common
+
+##code bouchon en attente de Monsieur Ali Jamais
+- name: Test du rôle SSH hardening
+  hosts: worker1
+  become: yes
+  roles:
+    - ssh_hardening
