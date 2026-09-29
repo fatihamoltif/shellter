@@ -5,7 +5,7 @@ def test_health_ok(client):
 
 
 def test_health_db_down(client, monkeypatch):
-    from app.extensions import db
+    from app.models import db
 
     def broken_execute(*args, **kwargs):
         raise Exception("DB down")
@@ -14,4 +14,4 @@ def test_health_db_down(client, monkeypatch):
 
     response = client.get("/health")
     assert response.status_code == 503
-    assert response.get_json()["status"] == "unavailable"
+    assert response.get_json()["status"] == "degraded"
