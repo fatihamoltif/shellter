@@ -1,5 +1,7 @@
 ---
 # Variables communes à toutes les VM Shellter — Séance S2 (P4)
+# (migré de group_vars/all.yml vers group_vars/all/ en S3 pour cohabiter avec
+#  le vault de P3 : group_vars/all/vault.yml)
 
 # --- Connexion SSH ---
 ansible_user: vagrant

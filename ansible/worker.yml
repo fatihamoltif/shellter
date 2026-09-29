@@ -1,0 +1,66 @@
+---
+# worker.yml — Squelette de déploiement du Worker Agent (S3, P4)
+# Prépare, sur chaque worker : le dossier de l'agent, un environnement Python isolé
+# et une unité systemd PROVISOIRE. Le code de l'agent et son activation réelle
+# (register + heartbeat) arrivent en S6.
+#
+# Lancement :  cd ansible && ansible-playbook worker.yml
+
+- name: Déploiement (squelette) du Worker Agent
+  hosts: workers
+  become: true
+  vars:
+    agent_dir: /opt/shellter/agent
+    agent_venv: /opt/shellter/agent/venv
+    agent_service: shellter-agent
+  tasks:
+    - name: Installer Python et les outils de venv
+      ansible.builtin.apt:
+        name:
+          - python3
+          - python3-venv
+          - python3-pip
+        state: present
+        update_cache: true
+
+    - name: Créer le répertoire de l'agent
+      ansible.builtin.file:
+        path: "{{ agent_dir }}"
+        state: directory
+        owner: root
+        group: root
+        mode: "0755"
+
+    - name: Créer l'environnement virtuel Python de l'agent
+      ansible.builtin.command:
+        cmd: "python3 -m venv {{ agent_venv }}"
+        creates: "{{ agent_venv }}/bin/activate"
+
+    - name: Déployer l'unité systemd provisoire du Worker Agent
+      ansible.builtin.copy:
+        dest: "/etc/systemd/system/{{ agent_service }}.service"
+        owner: root
+        group: root
+        mode: "0644"
+        content: |
+          [Unit]
+          Description=Shellter Worker Agent (provisoire - active en S6)
+          After=network-online.target docker.service
+          Wants=network-online.target
+
+          [Service]
+          Type=simple
+          WorkingDirectory={{ agent_dir }}
+          ExecStart={{ agent_venv }}/bin/python {{ agent_dir }}/agent.py
+          Restart=on-failure
+          RestartSec=5
+
+          [Install]
+          WantedBy=multi-user.target
+
+    - name: Enregistrer l'unité sans la démarrer (code de l'agent absent en S3)
+      ansible.builtin.systemd:
+        name: "{{ agent_service }}"
+        enabled: false
+        state: stopped
+        daemon_reload: true

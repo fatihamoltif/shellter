@@ -1,5 +1,15 @@
-Flask
-Flask-SQLAlchemy
-Flask-Migrate
-psycopg2-binary
-Werkzeug
+# Dépendances applicatives Shellter
+# (fusion des besoins runtime + migrations + authentification S5)
+flask==3.0.3
+flask-sqlalchemy==3.1.1
+# SQLAlchemy épinglé en 2.0.x : la 2.1 bascule le driver postgres par défaut sur
+# psycopg (v3), incompatible avec psycopg2-binary et les URL postgresql://.
+SQLAlchemy==2.0.36
+flask-migrate==4.0.7
+flask-login==0.6.3
+flask-wtf==1.2.1
+email-validator==2.2.0
+psycopg2-binary==2.9.9
+python-dotenv==1.0.1
+requests==2.32.3
+gunicorn==22.0.0
