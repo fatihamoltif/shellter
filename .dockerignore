@@ -1,0 +1,12 @@
+.git
+.github
+.vagrant
+__pycache__
+*.pyc
+.pytest_cache
+*.db
+.venv
+venv
+docs
+tests
+integration_tests

@@ -3,6 +3,7 @@
 Règle : parmi les workers AVAILABLE dont le heartbeat est récent et qui ont encore de la
 capacité, on choisit celui qui héberge le MOINS d'instances actives.
 """
+import os
 from datetime import datetime, timezone, timedelta
 
 from sqlalchemy import func
@@ -10,7 +11,8 @@ from sqlalchemy import func
 from .models import db, Worker, Instance
 
 # Un heartbeat plus vieux que ça => worker considéré injoignable.
-HEARTBEAT_TIMEOUT_SECONDS = 30
+# Configurable par variable d'environnement (utile en tests d'intégration).
+HEARTBEAT_TIMEOUT_SECONDS = int(os.getenv("HEARTBEAT_TIMEOUT_SECONDS", "30"))
 
 # Statuts d'instance qui « occupent » réellement un worker.
 ACTIVE_INSTANCE_STATUSES = ("pending", "creating", "running", "recovering")
