@@ -12,6 +12,7 @@ comment le tester, et la preuve obtenue.
 | [S5](S5-authentification.md) | API Web : auth | Dashboard + CSRF + tests d'accès | CI verte (15 tests) | ✅ |
 | [S6](S6-location.md) | API Web : location | Resource Manager + `/rent` | CI verte (28 tests) | ✅ |
 | [S7](S7-resilience.md) | Résilience / HA | Reprise sur un autre worker | CI verte (33 tests) | ✅ |
+| [S8](S8-ci.md) | Déploiement complet & CI | Tests d'intégration (docker compose) | CI verte (2 jobs) | ✅ |
 
 ## Documents de référence (hors journal)
 - Contrat d'API : [`docs/api.md`](../api.md)
