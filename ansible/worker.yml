@@ -53,7 +53,7 @@
           Environment="CONTROLLER_URL=http://192.168.56.10:5000"
           Environment="AGENT_TOKEN={{ agent_token }}"
           Environment="WORKER_IP={{ ansible_host }}"
-          ExecStart=/opt/shellter-agent/venv/bin/python agent.py
+          ExecStart=/opt/shellter-agent/venv/bin/python -u agent.py
           Restart=always
           RestartSec=5
 

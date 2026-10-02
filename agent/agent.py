@@ -52,10 +52,44 @@ def register_to_controller():
         print(f"Échec de l'enregistrement : {e}")
         return False
 
+def watch_containers():
+    # 1. On initialise le client Docker ICI
+    docker_client = docker.from_env()
+    
+    # On filtre uniquement les conteneurs créés par notre infrastructure
+    containers = docker_client.containers.list(all=True, filters={"label": "shellter"})
+    
+    for container in containers:
+        if container.status == 'exited':
+            print(f"[ALERTE] Conteneur {container.name} (mort) détecté. Tentative de relance...")
+            try:
+                # 1. Redémarrer le conteneur
+                container.start()
+                
+                # 2. Recharger les métadonnées pour lire le nouveau port dynamique
+                container.reload()
+                ports = container.attrs['NetworkSettings']['Ports']
+                new_ssh_port = ports['22/tcp'][0]['HostPort']
+                
+                print(f"[RECOVERY] {container.name} relancé sur le port {new_ssh_port}. Notification de l'API...")
+                
+                # 3. Prévenir l'API Flask du changement de port
+                headers = {"Authorization": f"Bearer {AGENT_TOKEN}"}
+                payload = {"new_port": new_ssh_port}
+                
+                # On suppose que l'API a une route pour mettre à jour l'instance par son nom ou son ID
+                requests.post(f"{CONTROLLER_URL}/instances/{container.name}/update_port", 
+                              json=payload, headers=headers)
+                              
+            except Exception as e:
+                print(f"[ERREUR] Impossible de recréer {container.name}: {e}")
+
 if __name__ == '__main__':
     # Au démarrage du service, on s'enregistre
     register_to_controller()
     
-    # On maintient le script en vie (P1 rajoutera le heartbeat ici en S7)
+    # On lance la boucle unique qui fait office de Watcher (et de Heartbeat)
+    print("Démarrage du Watcher...")
     while True:
-        time.sleep(10)
+        watch_containers()
+        time.sleep(15) # Vérification toutes les 15 secondes
