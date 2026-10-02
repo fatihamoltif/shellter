@@ -15,7 +15,7 @@ jobs:
       matrix:
         include:
           - image: flask
-            dockerfile: docker/Dockerfile
+            dockerfile: docker/Dockerfile.agent
             test_cmd: |
               docker run -d -p 5000:5000 --name test-flask shellter/flask:test
               sleep 5
