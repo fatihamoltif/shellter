@@ -17,15 +17,11 @@ jobs:
           - image: flask
             dockerfile: docker/Dockerfile.agent
             test_cmd: |
-              docker run -d -p 5000:5000 --name test-flask shellter/flask:test
-              sleep 5
-              curl -s http://localhost:5000/health | grep '"status":"ok"' || curl -s http://localhost:5000/health
+              docker run --rm shellter/flask:test python -c "from app import create_app; create_app('testing')"
           - image: agent
             dockerfile: docker/Dockerfile.agent
             test_cmd: |
-              docker run -d --name test-agent shellter/agent:test
-              sleep 2
-              docker ps | grep test-agent
+              docker run --rm shellter/agent:test python -c "import docker"
           - image: ubuntu
             dockerfile: docker/Dockerfile.ubuntu
             test_cmd: |

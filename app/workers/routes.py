@@ -1,7 +1,6 @@
 from flask import request, jsonify, current_app
-from app.models import db, Worker
+from app.models import db, Worker, Instance
 from datetime import datetime, timezone
-
 
 from . import bp
 
@@ -81,7 +80,7 @@ def get_worker(id):
 def update_instance_port(container_name):
     # Sécuriser la route (vérification du token)
     auth_header = request.headers.get('Authorization')
-    if not auth_header or auth_header != f"Bearer {app.config['AGENT_TOKEN']}":
+    if not auth_header or auth_header != f"Bearer {current_app.config['AGENT_TOKEN']}":
         return jsonify({"error": "Unauthorized"}), 401
         
     data = request.get_json()
