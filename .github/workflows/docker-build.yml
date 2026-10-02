@@ -15,7 +15,7 @@ jobs:
       matrix:
         include:
           - image: flask
-            dockerfile: docker/Dockerfile.agent
+            dockerfile: docker/Dockerfile
             test_cmd: |
               docker run --rm shellter/flask:test python -c "from app import create_app; create_app('testing')"
           - image: agent
