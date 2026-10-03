@@ -1,0 +1,5 @@
+# Dépendances de développement / CI (tests)
+-r requirements.txt
+pytest==8.3.3
+ruff==0.7.4
+ansible-lint==24.9.2
