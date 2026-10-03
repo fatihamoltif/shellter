@@ -13,3 +13,6 @@ psycopg2-binary==2.9.9
 python-dotenv==1.0.1
 requests==2.32.3
 gunicorn==22.0.0
+# FAILLE VOLONTAIRE (demo-vuln, S9) : dépendance obsolète avec CVE CRITICAL
+# CVE-2020-14343 (9.8) — corrigé en 5.4. Doit être bloqué par Trivy.
+PyYAML==5.3.1
