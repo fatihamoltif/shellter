@@ -10,6 +10,7 @@ from flask_migrate import Migrate
 from flask_login import LoginManager
 from flask_wtf import CSRFProtect
 from sqlalchemy import text
+from .scheduler import init_scheduler
 
 from .models import db, User
 from .config import config_by_name
@@ -70,5 +71,8 @@ def create_app(config_name=None):
             return jsonify(status="ok", db="up"), 200
         except Exception:
             return jsonify(status="degraded", db="down"), 503
+ 
+    if not app.config.get("TESTING"):
+        init_scheduler(app)
 
     return app

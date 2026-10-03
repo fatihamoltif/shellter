@@ -26,6 +26,29 @@ def get_system_info():
         "memory": memory_gb
     }
 
+def send_heartbeat():
+    """Envoie l'etat du worker au controller toutes les 10s."""
+    try:
+        info = get_system_info()
+        client = docker.from_env()
+        container_count = len(client.containers.list(filters={"label": "shellter.instance_id"}))
+
+        headers = {"Authorization": f"Bearer {AGENT_TOKEN}"}
+        payload = {
+            "hostname": info["hostname"],
+            "cpu_load": psutil.cpu_percent(interval=None),
+            "memory_used": psutil.virtual_memory().percent,
+            "container_count": container_count,
+        }
+        resp = requests.post(
+            f"{CONTROLLER_URL}/workers/heartbeat",
+            json=payload,
+            headers=headers,
+            timeout=5,
+        )
+        resp.raise_for_status()
+    except Exception as e:
+        print(f"[HEARTBEAT] Echec de l'envoi : {e}")
 def register_to_controller():
     """Vérifie Docker et envoie les infos à l'API Flask."""
     try:
@@ -85,11 +108,21 @@ def watch_containers():
                 print(f"[ERREUR] Impossible de recréer {container.name}: {e}")
 
 if __name__ == '__main__':
-    # Au démarrage du service, on s'enregistre
     register_to_controller()
-    
-    # On lance la boucle unique qui fait office de Watcher (et de Heartbeat)
-    print("Démarrage du Watcher...")
+
+    print("Demarrage du Watcher et du Heartbeat...")
+    last_heartbeat_time = 0
+    last_watch_time = 0
+
     while True:
-        watch_containers()
-        time.sleep(15) # Vérification toutes les 15 secondes
+        now = time.time()
+
+        if now - last_heartbeat_time >= 10:
+            send_heartbeat()
+            last_heartbeat_time = now
+
+        if now - last_watch_time >= 15:
+            watch_containers()
+            last_watch_time = now
+
+        time.sleep(1)

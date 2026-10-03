@@ -48,6 +48,31 @@ def register_worker():
     db.session.commit()
     return jsonify({'message': 'Worker enregistré avec succès', 'worker_id': worker.id}), 200
 
+@bp.route('/heartbeat', methods=['POST'])
+def worker_heartbeat():
+    """Route appelee par l'agent toutes les 10s pour signaler qu'il est vivant."""
+    if not check_agent_token(request):
+        return jsonify({'error': 'Accès non autorisé : Token invalide ou manquant'}), 401
+
+    data = request.get_json()
+    hostname = data.get('hostname')
+
+    if not hostname:
+        return jsonify({'error': 'Le champ hostname est obligatoire'}), 400
+
+    worker = Worker.query.filter_by(hostname=hostname).first()
+    if not worker:
+        return jsonify({'error': "Worker inconnu, utilisez /register d'abord"}), 404
+
+    worker.last_heartbeat = datetime.now(timezone.utc)
+    worker.cpu = data.get('cpu_load')
+    worker.memory = data.get('memory_used')
+
+    if worker.status == 'OFFLINE':
+        worker.status = 'AVAILABLE'
+
+    db.session.commit()
+    return jsonify({'message': 'Heartbeat recu', 'status': worker.status}), 200
 @bp.route('/', methods=['GET'])
 def get_workers():
     """Retourne la liste de tous les workers."""
