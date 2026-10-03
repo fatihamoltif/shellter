@@ -1,11 +1,11 @@
 ---
 - name: Mettre a jour le cache apt
-  apt:
-    update_cache: yes
+  ansible.builtin.apt:
+    update_cache: true
     cache_valid_time: 3600
 
 - name: Installer les paquets communs
-  apt:
+  ansible.builtin.apt:
     name:
       - curl
       - vim
@@ -16,18 +16,11 @@
     state: present
 
 - name: Configurer le fuseau horaire
-  timezone:
+  ansible.builtin.timezone:
     name: Europe/Paris
 
-- name: S'assurer que chrony (NTP) est demarre et active
-  service:
+- name: S'assurer que chrony (NTP) est demarre et actif
+  ansible.builtin.service:
     name: chrony
     state: started
-    enabled: yes
-
-- name: Creer l'utilisateur applicatif shellter
-  user:
-    name: shellter
-    shell: /bin/bash
-    create_home: yes
-    state: present
+    enabled: true

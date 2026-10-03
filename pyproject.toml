@@ -1,0 +1,8 @@
+[tool.ruff]
+line-length = 100
+
+[tool.ruff.lint]
+# F401 = "import non utilise" -> normal sur les fichiers routes.py
+# qui ne contiennent encore que l'import du blueprint, en attendant
+# que chacun y ajoute ses routes (cf. commentaires dans ces fichiers).
+per-file-ignores = { "app/*/routes.py" = ["F401"] }

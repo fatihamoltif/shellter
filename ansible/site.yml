@@ -1,6 +1,6 @@
 ---
 - name: Configuration de base (role common)
   hosts: controller
-  become: yes
+  become: true
   roles:
     - common
