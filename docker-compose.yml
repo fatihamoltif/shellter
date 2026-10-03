@@ -22,9 +22,11 @@ services:
       dockerfile: docker/Dockerfile
     restart: unless-stopped
     environment:
-      DATABASE_URL: postgresql+psycopg://${DB_USER}:${DB_PASSWORD}@db:5432/${DB_NAME}
+      DATABASE_URL: postgresql+psycopg2://${DB_USER}:${DB_PASSWORD}@db:5432/${DB_NAME}
       FLASK_ENV: development
       SECRET_KEY: ${SECRET_KEY}
+    volumes:
+      - .:/app
     ports:
       - "5000:5000"
     depends_on:
