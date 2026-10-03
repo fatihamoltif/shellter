@@ -94,20 +94,16 @@ jobs:
         if: always()
         run: docker compose -f docker-compose.ci.yml down -v
 
-  security:
-    name: Sécurité (Semgrep, gitleaks, Trivy)
+  # --- Sécurité : 3 scans INDÉPENDANTS (chacun peut échouer séparément) ---
+  sast:
+    name: Sécurité — SAST (Semgrep)
     runs-on: ubuntu-latest
     steps:
-      - name: Récupérer le code
-        uses: actions/checkout@v4
-
-      - name: Installer Python
-        uses: actions/setup-python@v5
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
         with:
           python-version: "3.12"
-
-      # --- SAST : analyse statique du code (injection SQL, XSS...) ---
-      - name: Semgrep (SAST)
+      - name: Semgrep (injection SQL, XSS, mauvais patterns)
         run: |
           python -m pip install --upgrade pip
           pip install semgrep
@@ -115,17 +111,24 @@ jobs:
             --config=.semgrep --config=p/python --config=p/flask \
             app scripts wsgi.py docker
 
-      # --- Détection de secrets commités ---
-      - name: gitleaks (secrets)
+  secrets:
+    name: Sécurité — Secrets (gitleaks)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: gitleaks (secrets commités)
         run: |
           docker run --rm -v "$PWD:/repo" zricethezav/gitleaks:latest \
             detect --source=/repo --no-git --redact -v
 
-      # --- Scan de vulnérabilités de l'image ---
+  image-scan:
+    name: Sécurité — Image (Trivy)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
       - name: Build de l'image Flask
         run: docker build -t shellter-web:ci -f docker/Dockerfile .
-
-      - name: Trivy (scan de l'image, gate CVE CRITICAL)
+      - name: Trivy (gate CVE CRITICAL)
         uses: aquasecurity/trivy-action@master
         with:
           image-ref: shellter-web:ci
