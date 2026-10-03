@@ -16,7 +16,7 @@
     state: present
 
 - name: Configurer le fuseau horaire
-  ansible.builtin.timezone:
+    community.general.timezone:
     name: Europe/Paris
 
 - name: S'assurer que chrony (NTP) est demarre et actif
