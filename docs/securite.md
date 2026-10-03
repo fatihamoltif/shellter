@@ -70,14 +70,21 @@ PyYAML==5.3.1            # CVE-2020-14343 (9.8) — corrigé en 5.4
 
 ---
 
-## 3. Preuve : 3 échecs distincts
+## 3. Preuve : 3 échecs distincts (confirmé)
 
-Sur la branche `demo-vuln`, le job `security` échoue sur **chacune des 3 étapes** :
-- ❌ **Semgrep** → injection SQL détectée.
-- ❌ **gitleaks** → clé AWS en dur détectée.
-- ❌ **Trivy** → CVE CRITICAL dans l'image.
+La sécurité est découpée en **3 jobs indépendants**, donc chaque faille échoue **séparément**.
+Sur la branche `demo-vuln`, l'onglet Actions montre :
 
-Chaque faille corrigée (voir ci-dessus) fait repasser l'étape correspondante au **vert**.
+| Job | Résultat | Faille |
+|---|---|---|
+| Sécurité — SAST (Semgrep) | ❌ failure | injection SQL |
+| Sécurité — Secrets (gitleaks) | ❌ failure | clé AWS en dur |
+| Sécurité — Image (Trivy) | ❌ failure | CVE CRITICAL (PyYAML) |
+| Tests / Intégration | ✅ success | (l'application fonctionne toujours) |
+
+→ **3 échecs distincts**, un par outil. Les jobs `test`/`integration` restent verts : les failles
+sont bien attrapées par la **sécurité**, pas en cassant le fonctionnement. Chaque faille corrigée
+(voir §2) fait repasser son job au **vert**.
 
 ---
 

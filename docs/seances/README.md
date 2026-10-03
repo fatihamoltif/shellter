@@ -13,6 +13,7 @@ comment le tester, et la preuve obtenue.
 | [S6](S6-location.md) | API Web : location | Resource Manager + `/rent` | CI verte (28 tests) | ✅ |
 | [S7](S7-resilience.md) | Résilience / HA | Reprise sur un autre worker | CI verte (33 tests) | ✅ |
 | [S8](S8-ci.md) | Déploiement complet & CI | Tests d'intégration (docker compose) | CI verte (2 jobs) | ✅ |
+| [S9](S9-securite.md) | Sécurité intégrée (DevSecOps) | Commit piège `demo-vuln` + docs | 3 échecs distincts | ✅ |
 
 ## Documents de référence (hors journal)
 - Contrat d'API : [`docs/api.md`](../api.md)
