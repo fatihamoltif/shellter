@@ -23,6 +23,10 @@ class TestingConfig(BaseConfig):
         "DATABASE_URL", "sqlite+pysqlite:///:memory:"
     )
 
+class IntegrationConfig(BaseConfig):
+    """Test local de la stack Docker Compose en HTTP."""
+    DEBUG = False
+    SESSION_COOKIE_SECURE = False
 
 class ProductionConfig(BaseConfig):
     DEBUG = False
@@ -32,5 +36,6 @@ class ProductionConfig(BaseConfig):
 config_by_name = {
     "development": DevelopmentConfig,
     "testing": TestingConfig,
+    "integration": IntegrationConfig,
     "production": ProductionConfig,
 }
