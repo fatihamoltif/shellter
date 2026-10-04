@@ -95,7 +95,7 @@ jobs:
           pip install -r requirements-dev.txt
 
       - name: Lancer les tests d'intégration
-        run: pytest integration_tests/ -v
+        run: python -m pytest integration_tests/ -v
 
       - name: Collecter les logs en cas d'échec
         if: failure()
@@ -111,10 +111,6 @@ jobs:
       - name: Arrêter la stack
         if: always()
         run: docker compose -f docker-compose.ci.yml down -v
-
-  # --------------------------------------------------
-  # Sécurité : scans indépendants
-  # --------------------------------------------------
 
   sast:
     name: Sécurité — SAST (Semgrep)
@@ -176,4 +172,3 @@ jobs:
           ignore-unfixed: true
           exit-code: "1"
           format: table
-
