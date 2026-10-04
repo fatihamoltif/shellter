@@ -43,7 +43,7 @@ jobs:
         run: |
           for f in $(find . -name "Dockerfile"); do
             echo "== $f =="
-            hadolint "$f"
+            hadolint --failure-threshold error "$f"
           done
 
   test:
