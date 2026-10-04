@@ -30,3 +30,6 @@ instance/*.sqlite3
 .vault_pass
 .vault_password
 *.vault-pass
+.env
+
+.env
