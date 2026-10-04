@@ -10,7 +10,7 @@ from sqlalchemy import text
 
 from .models import db, User
 from .config import config_by_name
-
+from .workers import bp as workers_bp
 
 migrate = Migrate()
 login_manager = LoginManager()
@@ -106,11 +106,12 @@ def create_app(config_name=None):
     app.register_blueprint(auth_bp)
     app.register_blueprint(dashboard_bp)
     app.register_blueprint(api_bp)
+    app.register_blueprint(workers_bp)
 
     # L'API reçoit du JSON/curl et ne fonctionne pas
     # comme un formulaire HTML Flask-WTF.
     csrf.exempt(api_bp)
-
+    csrf.exempt(workers_bp)
     # -------------------------------------------------
     # Routes générales
     # -------------------------------------------------

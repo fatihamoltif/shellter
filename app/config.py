@@ -10,7 +10,7 @@ class BaseConfig:
     SQLALCHEMY_DATABASE_URI = os.getenv("DATABASE_URL", "sqlite:///shellter.db")
     SQLALCHEMY_TRACK_MODIFICATIONS = False
     SESSION_COOKIE_HTTPONLY = True          # cookie de session inaccessible au JS
-
+    AGENT_TOKEN = os.getenv("AGENT_TOKEN")
 
 class DevelopmentConfig(BaseConfig):
     DEBUG = True
