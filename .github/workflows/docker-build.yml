@@ -23,26 +23,31 @@ jobs:
         include:
           - image: flask
             dockerfile: docker/Dockerfile
+            context: .
             test_cmd: |
               docker run --rm shellter/flask:test python -c "from app import create_app; create_app('testing')"
           - image: agent
-            dockerfile: docker/Dockerfile.agent
+            dockerfile: docker/agent/Dockerfile
+            context: .
             test_cmd: |
               docker run --rm shellter/agent:test python -c "import docker"
           - image: ubuntu
-            dockerfile: docker/Dockerfile.ubuntu
+            dockerfile: docker/distros/ubuntu24/Dockerfile
+            context: docker/distros/ubuntu24
             test_cmd: |
               docker run -d -p 2222:22 --name test-ubuntu shellter/ubuntu:test
               sleep 2
               nc -z localhost 2222
           - image: debian
-            dockerfile: docker/Dockerfile.debian
+            dockerfile: docker/distros/debian13/Dockerfile
+            context: docker/distros/debian13
             test_cmd: |
               docker run -d -p 2222:22 --name test-debian shellter/debian:test
               sleep 2
               nc -z localhost 2222
           - image: alpine
-            dockerfile: docker/Dockerfile.alpine
+            dockerfile: docker/distros/alpine/Dockerfile
+            context: docker/distros/alpine
             test_cmd: |
               docker run -d -p 2222:22 --name test-alpine shellter/alpine:test
               sleep 2
@@ -71,7 +76,7 @@ jobs:
 
       - name: Build de l'image
         run: |
-          docker build -t shellter/${{ matrix.image }}:test -f ${{ matrix.dockerfile }} .
+          docker build -t shellter/${{ matrix.image }}:test -f ${{ matrix.dockerfile }} ${{ matrix.context }}
           docker tag shellter/${{ matrix.image }}:test shellter/${{ matrix.image }}:${{ steps.tags.outputs.tag_sha }}
           if [ -n "${{ steps.tags.outputs.tag_git }}" ]; then
             docker tag shellter/${{ matrix.image }}:test shellter/${{ matrix.image }}:${{ steps.tags.outputs.tag_git }}
