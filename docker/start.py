@@ -56,6 +56,27 @@ with app.app_context():
             last_heartbeat=datetime.now(timezone.utc),
         ))
 
+    # Déploiement sur les VM : seed des vrais workers.
+    # REAL_WORKERS="worker1:192.168.56.11,worker2:192.168.56.12,worker3:192.168.56.13"
+    real = os.getenv("REAL_WORKERS")
+    if real:
+        for spec in real.split(","):
+            host, ip = spec.split(":")
+            worker = Worker.query.filter_by(hostname=host).first()
+            if worker is None:
+                db.session.add(Worker(
+                    hostname=host, ip=ip, status="AVAILABLE",
+                    cpu=2, memory=2048, max_instances=10,
+                    agent_url=f"http://{ip}:5000",
+                    last_heartbeat=datetime.now(timezone.utc),
+                ))
+            else:
+                # Redéploiement : rafraîchir pour que le worker soit de nouveau éligible.
+                worker.ip = ip
+                worker.status = "AVAILABLE"
+                worker.agent_url = f"http://{ip}:5000"
+                worker.last_heartbeat = datetime.now(timezone.utc)
+
     db.session.commit()
 
 # 4) démarrer le serveur
