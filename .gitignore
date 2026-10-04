@@ -1,0 +1,32 @@
+# Vagrant / VirtualBox
+.vagrant/
+
+# Python
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.venv/
+venv/
+
+# Bases locales
+instance/*.db
+instance/*.sqlite
+instance/*.sqlite3
+*.db
+
+# Variables d'environnement / secrets locaux
+.env
+.env.*
+!.env.example
+
+# IDE
+.vscode/
+.idea/
+
+# Logs
+*.log
+
+# Fichiers de mot de passe Vault éventuels
+.vault_pass
+.vault_password
+*.vault-pass
