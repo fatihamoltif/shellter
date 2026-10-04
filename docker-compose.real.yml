@@ -1,0 +1,48 @@
+# Stack RÉELLE (pour démo locale) : la location crée de VRAIS conteneurs SSH.
+#   - agent : Worker Agent réel, lance des conteneurs sur le Docker de l'hôte (socket monté)
+#   - web   : Flask, worker seedé pointant sur l'agent réel, host "localhost"
+# On peut ensuite se connecter : ssh <user>@localhost -p <port>
+#
+# (La CI, elle, utilise docker-compose.ci.yml avec un agent mock — pas de docker-in-docker.)
+
+services:
+  db:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_USER: shellter
+      POSTGRES_PASSWORD: shellter
+      POSTGRES_DB: shellter
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U shellter -d shellter"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  agent:
+    build:
+      context: .
+      dockerfile: docker/agent/Dockerfile
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock      # crée des conteneurs sur l'hôte
+
+  web:
+    build:
+      context: .
+      dockerfile: docker/Dockerfile
+    command: python docker/start.py
+    environment:
+      FLASK_CONFIG: development
+      SECRET_KEY: dev-real
+      DATABASE_URL: postgresql://shellter:shellter@db:5432/shellter
+      SEED_MOCK_WORKER: "1"
+      WORKER_IP: "localhost"            # -> ssh ...@localhost -p <port>
+      AGENT_URL: "http://agent:5000"
+      AGENT_TIMEOUT: "180"              # 1re location d'une distro = build de l'image SSH
+      HEARTBEAT_TIMEOUT_SECONDS: "86400"
+    depends_on:
+      db:
+        condition: service_healthy
+      agent:
+        condition: service_started
+    ports:
+      - "8080:5000"

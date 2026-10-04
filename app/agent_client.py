@@ -4,7 +4,13 @@ Flask ne parle jamais directement au démon Docker : il appelle l'API de l'agent
 Ce module est la « couture » : P3 fournira l'agent réel ; ici on a un client HTTP simple,
 facilement remplaçable (mocké dans les tests).
 """
+import os
+
 import requests
+
+# Timeout des appels à l'agent. Court pour le mock (CI) ; plus long pour l'agent réel,
+# dont la 1re création d'une distro peut construire l'image SSH.
+AGENT_TIMEOUT = int(os.getenv("AGENT_TIMEOUT", "10"))
 
 
 class AgentError(Exception):
@@ -26,7 +32,7 @@ def create_container(worker, image, ssh_port, instance_id, ssh_user, ssh_secret,
                     "shellter.expires_at": expires_at,
                 },
             },
-            timeout=10,
+            timeout=AGENT_TIMEOUT,
         )
         resp.raise_for_status()
         return resp.json()
@@ -39,7 +45,7 @@ def delete_container(worker, container_id):
     try:
         resp = requests.delete(
             f"{worker.agent_url}/containers/{container_id}",
-            timeout=10,
+            timeout=AGENT_TIMEOUT,
         )
         resp.raise_for_status()
     except requests.RequestException as exc:

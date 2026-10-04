@@ -114,6 +114,7 @@ def rent():
 
     payload = _instance_payload(instance, worker)
     payload["rental_id"] = rental.id
+    payload["ssh_password"] = ssh_secret   # credential remis au propriétaire à la création
     return jsonify(payload), 201
 
 

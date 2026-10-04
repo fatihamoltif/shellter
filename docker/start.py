@@ -48,9 +48,11 @@ with app.app_context():
     # 3) worker fictif pointant sur l'agent mock (pour que /rent aboutisse en intégration)
     if os.getenv("SEED_MOCK_WORKER") == "1" and not Worker.query.filter_by(hostname="mock").first():
         db.session.add(Worker(
-            hostname="mock", ip="agent-mock", status="AVAILABLE",
+            hostname="mock",
+            ip=os.getenv("WORKER_IP", "agent-mock"),          # localhost en stack réelle
+            status="AVAILABLE",
             cpu=2, memory=2048, max_instances=10,
-            agent_url="http://agent-mock:5000",
+            agent_url=os.getenv("AGENT_URL", "http://agent-mock:5000"),
             last_heartbeat=datetime.now(timezone.utc),
         ))
 
