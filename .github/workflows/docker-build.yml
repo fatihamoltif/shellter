@@ -35,21 +35,21 @@ jobs:
             dockerfile: docker/distros/ubuntu24/Dockerfile
             context: docker/distros/ubuntu24
             test_cmd: |
-              docker run -d -p 2222:22 --name test-ubuntu shellter/ubuntu:test
+              docker run -d -p 2222:22 -e SSH_USER=testuser -e SSH_PASSWORD=testpass --name test-ubuntu shellter/ubuntu:test
               sleep 2
               nc -z localhost 2222
           - image: debian
             dockerfile: docker/distros/debian13/Dockerfile
             context: docker/distros/debian13
             test_cmd: |
-              docker run -d -p 2222:22 --name test-debian shellter/debian:test
+              docker run -d -p 2222:22 -e SSH_USER=testuser -e SSH_PASSWORD=testpass --name test-debian shellter/debian:test
               sleep 2
               nc -z localhost 2222
           - image: alpine
             dockerfile: docker/distros/alpine/Dockerfile
             context: docker/distros/alpine
             test_cmd: |
-              docker run -d -p 2222:22 --name test-alpine shellter/alpine:test
+              docker run -d -p 2222:22 -e SSH_USER=testuser -e SSH_PASSWORD=testpass --name test-alpine shellter/alpine:test
               sleep 2
               nc -z localhost 2222
 
