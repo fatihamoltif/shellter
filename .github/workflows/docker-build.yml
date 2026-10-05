@@ -1,0 +1,67 @@
+name: Build and Test Docker Images
+
+on:
+  push:
+    branches: [ "main", "yousseframmeh" ]
+    tags: [ "v*.*.*" ]
+  pull_request:
+
+jobs:
+  build-and-test:
+    name: Build & Smoke Test
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - image: flask
+            dockerfile: docker/Dockerfile
+            test_cmd: |
+              docker run --rm shellter/flask:test python -c "from app import create_app; create_app('testing')"
+          - image: agent
+            dockerfile: docker/Dockerfile.agent
+            test_cmd: |
+              docker run --rm shellter/agent:test python -c "import docker"
+          - image: ubuntu
+            dockerfile: docker/Dockerfile.ubuntu
+            test_cmd: |
+              docker run -d -p 2222:22 --name test-ubuntu shellter/ubuntu:test
+              sleep 2
+              nc -z localhost 2222
+          - image: debian
+            dockerfile: docker/Dockerfile.debian
+            test_cmd: |
+              docker run -d -p 2222:22 --name test-debian shellter/debian:test
+              sleep 2
+              nc -z localhost 2222
+          - image: alpine
+            dockerfile: docker/Dockerfile.alpine
+            test_cmd: |
+              docker run -d -p 2222:22 --name test-alpine shellter/alpine:test
+              sleep 2
+              nc -z localhost 2222
+
+    steps:
+      - name: Récupérer le code
+        uses: actions/checkout@v4
+
+      - name: Génération des tags dynamiques
+        id: tags
+        run: |
+          SHA_TAG=${GITHUB_SHA::7}
+          echo "tag_sha=$SHA_TAG" >> $GITHUB_OUTPUT
+          if [[ $GITHUB_REF == refs/tags/* ]]; then
+            echo "tag_git=${GITHUB_REF#refs/tags/}" >> $GITHUB_OUTPUT
+          fi
+
+      - name: Build de l'image
+        run: |
+          docker build -t shellter/${{ matrix.image }}:test -f ${{ matrix.dockerfile }} .
+          docker tag shellter/${{ matrix.image }}:test shellter/${{ matrix.image }}:${{ steps.tags.outputs.tag_sha }}
+          if [ -n "${{ steps.tags.outputs.tag_git }}" ]; then
+            docker tag shellter/${{ matrix.image }}:test shellter/${{ matrix.image }}:${{ steps.tags.outputs.tag_git }}
+          fi
+
+      - name: Smoke test
+        run: |
+          ${{ matrix.test_cmd }}

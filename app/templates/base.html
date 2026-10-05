@@ -1,0 +1,27 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>{% block title %}Shellter{% endblock %}</title>
+  <style>
+    body { font-family: system-ui, sans-serif; max-width: 640px; margin: 40px auto; padding: 0 16px; }
+    .flash { padding: 10px 14px; border-radius: 6px; margin: 8px 0; }
+    .flash.error { background: #fde8e8; color: #9b1c1c; }
+    .flash.success { background: #e6f4ea; color: #1e6b33; }
+    label { display: block; margin: 10px 0 4px; }
+    input { width: 100%; padding: 8px; box-sizing: border-box; }
+    button { margin-top: 14px; padding: 8px 16px; cursor: pointer; }
+    .btn { display: inline-block; padding: 8px 14px; background: #1a56db; color: #fff;
+           border-radius: 6px; text-decoration: none; margin-right: 8px; }
+  </style>
+</head>
+<body>
+  {% with messages = get_flashed_messages(with_categories=true) %}
+    {% for category, message in messages %}
+      <div class="flash {{ category }}">{{ message }}</div>
+    {% endfor %}
+  {% endwith %}
+  {% block content %}{% endblock %}
+</body>
+</html>

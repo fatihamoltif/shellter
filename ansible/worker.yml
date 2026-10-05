@@ -1,0 +1,75 @@
+---
+- name: Déploiement du Worker Agent
+  hosts: workers
+  become: yes
+  vars:
+    agent_token: "ton_token_super_secret_123"
+  tasks:
+    - name: Créer le répertoire de l'agent
+      file:
+        path: /opt/shellter-agent
+        state: directory
+        owner: shellter
+        group: shellter
+        mode: '0755'
+
+    - name: Installer pip et venv
+      apt:
+        name: 
+          - python3-pip
+          - python3-venv
+        state: present
+        update_cache: yes
+
+    - name: Copier les fichiers de l'agent
+      copy:
+        src: ../agent/{{ item }}
+        dest: /opt/shellter-agent/{{ item }}
+        owner: shellter
+        group: shellter
+      loop:
+        - agent.py
+        - requirements.txt
+
+    - name: Créer l'environnement virtuel et installer les dépendances
+      pip:
+        requirements: /opt/shellter-agent/requirements.txt
+        virtualenv: /opt/shellter-agent/venv
+        virtualenv_command: python3 -m venv
+
+    - name: Créer le service systemd pour l'agent
+      copy:
+        dest: /etc/systemd/system/shellter-agent.service
+        content: |
+          [Unit]
+          Description=Shellter Worker Agent
+          After=network.target docker.service
+          Requires=docker.service
+
+          [Service]
+          Type=simple
+          User=root
+          WorkingDirectory=/opt/shellter-agent
+          Environment="CONTROLLER_URL=http://192.168.56.10:5000"
+          Environment="AGENT_TOKEN={{ agent_token }}"
+          Environment="WORKER_IP={{ ansible_host }}"
+          ExecStart=/opt/shellter-agent/venv/bin/python -u agent.py
+          Restart=always
+          RestartSec=5
+
+          [Install]
+          WantedBy=multi-user.target
+      notify: restart shellter-agent
+
+    - name: Activer et démarrer le service de l'agent
+      systemd:
+        name: shellter-agent
+        enabled: yes
+        state: started
+        daemon_reload: yes
+
+  handlers:
+    - name: restart shellter-agent
+      systemd:
+        name: shellter-agent
+        state: restarted

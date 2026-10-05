@@ -1,8 +1,10 @@
-from flask_sqlalchemy import SQLAlchemy
-from werkzeug.security import generate_password_hash, check_password_hash
 from datetime import datetime, timezone
+from flask_sqlalchemy import SQLAlchemy
+from flask_login import UserMixin
+from werkzeug.security import generate_password_hash, check_password_hash
 
 db = SQLAlchemy()
+
 
 class Worker(db.Model):
     __tablename__ = "workers"
@@ -144,16 +146,18 @@ class Rental(db.Model):
     )
 
 
-
-class User(db.Model):
-    __tablename__ = 'users'
+class User(UserMixin, db.Model):
+    __tablename__ = "users"
 
     id = db.Column(db.Integer, primary_key=True)
-    # Contraintes d'unicité obligatoires pour éviter les doublons
-    username = db.Column(db.String(64), unique=True, nullable=False)
-    email = db.Column(db.String(120), unique=True, nullable=False)
-    password_hash = db.Column(db.String(256), nullable=False)
-    created_at = db.Column(db.DateTime, default=lambda: datetime.now(timezone.utc))
+    username = db.Column(db.String(100), unique=True, nullable=False)
+    email = db.Column(db.String(255), unique=True, nullable=False)
+    password_hash = db.Column(db.String(255), nullable=False)
+    created_at = db.Column(
+        db.DateTime(timezone=True),
+        nullable=False,
+        default=lambda: datetime.now(timezone.utc)
+    )
 
     def set_password(self, password):
         """Hache le mot de passe avant de l'enregistrer en base."""
@@ -168,15 +172,25 @@ class User(db.Model):
 
 
 class Distribution(db.Model):
-    __tablename__ = 'distributions'
+    __tablename__ = "distributions"
 
     id = db.Column(db.Integer, primary_key=True)
-    name = db.Column(db.String(64), nullable=False)
-    docker_image = db.Column(db.String(128), nullable=False)
-    version = db.Column(db.String(32), nullable=False)
-    status = db.Column(db.String(32), default='enabled') # statuts possibles : enabled / disabled
+    name = db.Column(db.String(100), nullable=False)
+    docker_image = db.Column(db.String(255), nullable=False)
+    version = db.Column(db.String(50), nullable=False)
+
+    status = db.Column(
+        db.String(20),
+        nullable=False,
+        default="enabled"
+    )
+
+    __table_args__ = (
+        db.CheckConstraint(
+            "status IN ('enabled', 'disabled')",
+            name="ck_distributions_status"
+        ),
+    )
 
     def __repr__(self):
         return f'<Distribution {self.name} {self.version}>'
-
-
