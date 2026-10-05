@@ -1,0 +1,40 @@
+---
+- name: Déploiement de l'application Shellter (Contrôleur)
+  hosts: controller
+  become: yes
+  vars:
+    # Ce tag sera surchargé par le pipeline (ex: le SHA du commit)
+    image_tag: "latest" 
+    project_dir: "/opt/shellter"
+  tasks:
+    - name: Mise à jour de la variable IMAGE_TAG dans le .env
+      ansible.builtin.lineinfile:
+        path: "{{ project_dir }}/.env"
+        regexp: '^IMAGE_TAG='
+        line: "IMAGE_TAG={{ image_tag }}"
+        create: yes
+
+    - name: Déploiement via Docker Compose (Pull & Up)
+      community.docker.docker_compose_v2:
+        project_src: "{{ project_dir }}"
+        pull: always
+        state: present
+        build: never
+
+- name: Mise à jour des Agents (Workers)
+  hosts: workers
+  become: yes
+  vars:
+    image_tag: "latest"
+  tasks:
+    - name: Pull de la nouvelle image de l'agent
+      community.docker.docker_image:
+        name: "shellter/agent:{{ image_tag }}"
+        source: pull
+
+    - name: Redémarrage du conteneur Agent avec la nouvelle image
+      community.docker.docker_container:
+        name: shellter-agent
+        image: "shellter/agent:{{ image_tag }}"
+        state: started
+        restart: yes
