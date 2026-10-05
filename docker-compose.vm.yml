@@ -45,6 +45,7 @@ services:
     restart: unless-stopped
     command: python scripts/expiration_worker.py
     environment:
+      PYTHONPATH: /app
       FLASK_CONFIG: development
       SECRET_KEY: prod-demo
       DATABASE_URL: postgresql://shellter:shellter@db:5432/shellter
