@@ -1,0 +1,79 @@
+---
+# deploy.yml — Déploiement de Shellter sur les VM (S10, intégration réelle).
+#   - workers : Worker Agent réel (conteneur Docker, socket monté) + ports ouverts (ufw)
+#   - controller : control plane (db + web via docker compose) + port web ouvert
+#
+# Lancement :  cd ansible && ansible-playbook -i hosts.ini deploy.yml --ask-vault-pass
+
+- name: Déployer les Worker Agents sur les workers
+  hosts: workers
+  become: true
+  tasks:
+    - name: Ouvrir le port de l'agent (ufw)
+      community.general.ufw:
+        rule: allow
+        port: "5000"
+        proto: tcp
+
+    - name: Ouvrir la plage de ports SSH des conteneurs loués (ufw)
+      community.general.ufw:
+        rule: allow
+        port: "20000:30000"
+        proto: tcp
+
+    - name: (Re)déployer le Worker Agent (conteneur sur le Docker local)
+      ansible.builtin.shell: |
+        set -e
+        docker rm -f shellter-agent 2>/dev/null || true
+        docker build -q -t shellter-agent -f /vagrant/docker/agent/Dockerfile /vagrant
+        docker run -d --name shellter-agent --restart unless-stopped \
+          -p 5000:5000 -v /var/run/docker.sock:/var/run/docker.sock \
+          shellter-agent
+      args:
+        executable: /bin/bash
+
+    - name: Vérifier que l'agent répond
+      ansible.builtin.uri:
+        url: "http://127.0.0.1:5000/containers"
+        status_code: 200
+      retries: 10
+      delay: 3
+      register: agent_check
+      until: agent_check.status == 200
+
+- name: Déployer le control plane sur le controller
+  hosts: controller
+  become: true
+
+  tasks:
+    - name: Générer le certificat TLS
+      ansible.builtin.include_role:
+        name: tls
+
+    - name: Ouvrir HTTP
+      community.general.ufw:
+        rule: allow
+        port: "80"
+        proto: tcp
+
+    - name: Ouvrir HTTPS
+      community.general.ufw:
+        rule: allow
+        port: "443"
+        proto: tcp
+
+    - name: Démarrer la stack HTTPS
+      ansible.builtin.command:
+        cmd: docker compose -f /vagrant/docker-compose.vm.yml up -d --build
+        chdir: /vagrant
+      changed_when: true
+
+    - name: Vérifier HTTPS
+      ansible.builtin.uri:
+        url: "https://127.0.0.1/health"
+        status_code: 200
+        validate_certs: false
+      retries: 20
+      delay: 3
+      register: https_health
+      until: https_health.status == 200

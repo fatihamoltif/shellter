@@ -1,0 +1,50 @@
+---
+- name: Installer OpenSSL
+  ansible.builtin.apt:
+    name: openssl
+    state: present
+    update_cache: true
+
+- name: Créer le répertoire TLS
+  ansible.builtin.file:
+    path: /etc/shellter/tls
+    state: directory
+    owner: root
+    group: root
+    mode: "0755"
+
+- name: Générer la clé privée TLS
+  ansible.builtin.command:
+    cmd: >
+      openssl genrsa
+      -out /etc/shellter/tls/shellter.key
+      2048
+    creates: /etc/shellter/tls/shellter.key
+
+- name: Protéger la clé privée
+  ansible.builtin.file:
+    path: /etc/shellter/tls/shellter.key
+    owner: root
+    group: root
+    mode: "0600"
+
+- name: Générer le certificat auto-signé
+  ansible.builtin.command:
+    cmd: >
+      openssl req
+      -x509
+      -new
+      -key /etc/shellter/tls/shellter.key
+      -sha256
+      -days 365
+      -out /etc/shellter/tls/shellter.crt
+      -subj /CN=192.168.56.10
+      -addext subjectAltName=IP:192.168.56.10,DNS:shellter.local
+    creates: /etc/shellter/tls/shellter.crt
+
+- name: Rendre le certificat lisible
+  ansible.builtin.file:
+    path: /etc/shellter/tls/shellter.crt
+    owner: root
+    group: root
+    mode: "0644"
