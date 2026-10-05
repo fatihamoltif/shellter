@@ -1,7 +1,10 @@
 FROM alpine:3.18
-RUN apk add --no-cache openssh && \
+
+RUN apk add --no-cache openssh sudo && \
     ssh-keygen -A && \
-    echo 'root:root' | chpasswd && \
-    sed -i 's/#PermitRootLogin prohibit-password/PermitRootLogin yes/' /etc/ssh/sshd_config
+    adduser -D -s /bin/ash ansible
+
+RUN sed -i 's/^#PermitRootLogin.*/PermitRootLogin no/' /etc/ssh/sshd_config
+
 EXPOSE 22
 CMD ["/usr/sbin/sshd", "-D"]
