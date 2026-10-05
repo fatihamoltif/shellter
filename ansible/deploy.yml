@@ -1,9 +1,56 @@
 ---
 # deploy.yml — Déploiement de Shellter sur les VM (S10, intégration réelle).
-#   - workers : Worker Agent réel (conteneur Docker, socket monté) + ports ouverts (ufw)
-#   - controller : control plane (db + web via docker compose) + port web ouvert
+#   - all        : résolution DNS fiable et durable (pré-requis des pulls d'images)
+#   - workers    : Worker Agent réel (conteneur Docker, socket monté) + ports ouverts (ufw)
+#   - controller : control plane (db + web + nginx HTTPS) + ports ouverts
 #
 # Lancement :  cd ansible && ansible-playbook -i hosts.ini deploy.yml --ask-vault-pass
+
+- name: Résolution DNS fiable et durable (évite l'échec de pull d'images)
+  hosts: all
+  become: true
+  tasks:
+    # Après une suspension/reprise de VM, le DNS NAT par défaut peut se figer et
+    # systemd-resolved ne résout plus (ex. docker.io) -> les builds échouent.
+    # On fixe des serveurs DNS upstream fiables, de façon persistante (reboot inclus).
+    - name: Créer le dossier de drop-in systemd-resolved
+      ansible.builtin.file:
+        path: /etc/systemd/resolved.conf.d
+        state: directory
+        mode: "0755"
+
+    - name: Définir des serveurs DNS upstream fiables
+      ansible.builtin.copy:
+        dest: /etc/systemd/resolved.conf.d/shellter-dns.conf
+        mode: "0644"
+        content: |
+          [Resolve]
+          DNS=8.8.8.8 1.1.1.1
+          FallbackDNS=8.8.4.4 1.0.0.1
+      register: resolved_conf
+
+    - name: S'assurer que /etc/resolv.conf pointe sur le stub systemd-resolved
+      ansible.builtin.file:
+        src: /run/systemd/resolve/stub-resolv.conf
+        dest: /etc/resolv.conf
+        state: link
+        force: true
+      register: resolv_link
+
+    - name: Redémarrer systemd-resolved si la configuration a changé
+      ansible.builtin.systemd:
+        name: systemd-resolved
+        state: restarted
+      when: resolved_conf.changed or resolv_link.changed
+
+    - name: Vérifier la résolution DNS externe
+      ansible.builtin.command: getent hosts registry-1.docker.io
+      changed_when: false
+      register: dns_check
+      retries: 3
+      delay: 2
+      until: dns_check.rc == 0
+
 
 - name: Déployer les Worker Agents sur les workers
   hosts: workers
