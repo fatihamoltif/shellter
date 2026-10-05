@@ -13,6 +13,7 @@ from .resource_manager import (
     HEARTBEAT_TIMEOUT_SECONDS,
 )
 from . import agent_client
+from .ssh_credentials import reveal_password
 
 # Instances qu'on tente de récupérer quand leur worker tombe.
 RECOVERABLE_STATUSES = ("running", "recovering")
@@ -80,7 +81,8 @@ def recover_instances():
                     ssh_port=port,
                     instance_id=instance.id,
                     ssh_user=instance.ssh_user,
-                    ssh_secret=instance.ssh_secret,
+                    # secret stocké chiffré -> on le déchiffre pour le conteneur recréé
+                    ssh_secret=reveal_password(instance.ssh_secret),
                     expires_at=end.isoformat() if end else "",
                 )
             except agent_client.AgentError:

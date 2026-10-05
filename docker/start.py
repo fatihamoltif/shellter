@@ -33,8 +33,14 @@ with app.app_context():
         except Exception:
             time.sleep(2)
 
-    # 2) créer les tables + données de départ
-    db.create_all()
+    # 2) appliquer les migrations versionnées (Flask-Migrate) ; un changement de
+    #    schéma ne détruit plus la base. Repli sur create_all() si indisponible.
+    try:
+        from flask_migrate import upgrade
+        upgrade()
+    except Exception as exc:
+        print(f"[start] migrations indisponibles ({exc}) -> db.create_all()", flush=True)
+        db.create_all()
 
     for name, image, version in DISTROS:
         if not Distribution.query.filter_by(name=name).first():

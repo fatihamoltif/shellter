@@ -21,3 +21,6 @@ Thumbs.db
 # Tests / bases locales
 .pytest_cache/
 *.db
+
+# Certificats TLS auto-signés générés au déploiement (nginx)
+nginx/tls/

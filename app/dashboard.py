@@ -8,22 +8,12 @@ from flask import Blueprint, render_template
 from flask_login import login_required, current_user
 
 from .models import Distribution, Rental
-from .ssh_credentials import decrypt_password
+from .ssh_credentials import reveal_password as _reveal
 
 dashboard_bp = Blueprint("dashboard", __name__)
 
 # Statuts d'instance à ne plus afficher dans « Mes instances ».
 _HIDDEN_STATUSES = ("stopped", "error", "deleted")
-
-
-def _reveal(secret):
-    """Déchiffre le mot de passe stocké ; tolère un ancien secret en clair."""
-    if not secret:
-        return None
-    try:
-        return decrypt_password(secret)
-    except Exception:
-        return secret
 
 
 @dashboard_bp.route("/dashboard")

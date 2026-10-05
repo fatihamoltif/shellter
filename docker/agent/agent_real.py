@@ -5,8 +5,12 @@ frères sur le démon Docker de l'hôte (socket monté). Chaque conteneur est un
 avec sshd, son port 22 publié sur un port de l'hôte.
 """
 import os
+import socket
+import threading
+import time
 
 import docker
+import requests
 from flask import Flask, jsonify, request
 
 app = Flask(__name__)
@@ -14,6 +18,37 @@ client = docker.from_env()
 
 SSH_DIR = os.getenv("SSH_IMAGE_DIR", "/agent/ssh")
 _built = set()
+
+# --- Heartbeat vers le controller -----------------------------------------
+# L'agent signale périodiquement qu'il est vivant : le controller rafraîchit
+# last_heartbeat. Si l'agent meurt, les heartbeats s'arrêtent -> le worker
+# devient stale puis OFFLINE (détection de panne réelle).
+CONTROLLER_URL = os.getenv("CONTROLLER_URL")
+WORKER_HOSTNAME = os.getenv("WORKER_HOSTNAME", socket.gethostname())
+WORKER_IP = os.getenv("WORKER_IP", "")
+AGENT_URL = os.getenv("AGENT_URL", f"http://{WORKER_IP}:5000")
+HEARTBEAT_INTERVAL = int(os.getenv("HEARTBEAT_INTERVAL", "10"))
+WORKER_MAX_INSTANCES = int(os.getenv("WORKER_MAX_INSTANCES", "10"))
+
+
+def _heartbeat_loop():
+    payload = {
+        "hostname": WORKER_HOSTNAME,
+        "ip": WORKER_IP,
+        "agent_url": AGENT_URL,
+        "max_instances": WORKER_MAX_INSTANCES,
+    }
+    url = f"{CONTROLLER_URL}/workers/heartbeat"
+    while True:
+        try:
+            requests.post(url, json=payload, timeout=5)
+        except Exception:
+            pass   # controller momentanément injoignable : on réessaiera
+        time.sleep(HEARTBEAT_INTERVAL)
+
+
+if CONTROLLER_URL:
+    threading.Thread(target=_heartbeat_loop, daemon=True).start()
 
 
 def ensure_image(base_image):

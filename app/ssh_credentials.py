@@ -29,5 +29,15 @@ def decrypt_password(encrypted_password):
     return _get_fernet().decrypt(encrypted_password.encode()).decode()
 
 
+def reveal_password(secret):
+    """Déchiffre un secret stocké ; tolère un ancien secret en clair (retourné tel quel)."""
+    if not secret:
+        return secret
+    try:
+        return decrypt_password(secret)
+    except Exception:
+        return secret
+
+
 def build_ssh_command(username, worker_ip, port):
     return f"ssh {username}@{worker_ip} -p {port}"
