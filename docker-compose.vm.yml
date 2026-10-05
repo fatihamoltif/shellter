@@ -37,5 +37,22 @@ services:
     ports:
       - "8080:5000"
 
+  # Worker de fond (Fatiha) : detruit les conteneurs des locations expirees.
+  expiration-worker:
+    build:
+      context: .
+      dockerfile: docker/Dockerfile
+    restart: unless-stopped
+    command: python scripts/expiration_worker.py
+    environment:
+      FLASK_CONFIG: development
+      SECRET_KEY: prod-demo
+      DATABASE_URL: postgresql://shellter:shellter@db:5432/shellter
+      AGENT_TIMEOUT: "180"
+      EXPIRATION_CHECK_INTERVAL: "15"
+    depends_on:
+      db:
+        condition: service_healthy
+
 volumes:
   db_data:
