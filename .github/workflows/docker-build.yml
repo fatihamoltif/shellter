@@ -62,6 +62,16 @@ jobs:
             docker tag shellter/${{ matrix.image }}:test shellter/${{ matrix.image }}:${{ steps.tags.outputs.tag_git }}
           fi
 
+      - name: Scan de sécurité Trivy (Security Gate)
+        uses: aquasecurity/trivy-action@master
+        with:
+          image-ref: 'shellter/${{ matrix.image }}:test'
+          format: 'table'
+          exit-code: '1'
+          ignore-unfixed: true
+          vuln-type: 'os,library'
+          severity: 'CRITICAL'
+
       - name: Smoke test
         run: |
           ${{ matrix.test_cmd }}

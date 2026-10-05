@@ -1,7 +1,11 @@
-FROM debian:12
-RUN apt-get update && apt-get install -y openssh-server && \
+FROM debian:10
+
+RUN apt-get update && apt-get install -y openssh-server sudo && \
     mkdir /var/run/sshd && \
-    echo 'root:root' | chpasswd && \
-    sed -i 's/#PermitRootLogin prohibit-password/PermitRootLogin yes/' /etc/ssh/sshd_config
+    rm -rf /var/lib/apt/lists/* && \
+    useradd -rm -d /home/ansible -s /bin/bash -g root -G sudo -u 1000 ansible
+
+RUN sed -i 's/^#PermitRootLogin.*/PermitRootLogin no/' /etc/ssh/sshd_config
+
 EXPOSE 22
 CMD ["/usr/sbin/sshd", "-D"]

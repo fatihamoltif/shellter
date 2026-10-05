@@ -1,6 +1,15 @@
 FROM python:3.11-slim
+
+RUN useradd -m agentuser
+
 WORKDIR /app
+
 COPY agent/requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
+
 COPY agent/agent.py .
+RUN chown -R agentuser:agentuser /app
+
+USER agentuser
+
 CMD ["python", "-u", "agent.py"]
