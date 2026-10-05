@@ -1,0 +1,12 @@
+title = "Configuration gitleaks — Shellter"
+
+[extend]
+useDefault = true
+
+[allowlist]
+description = "Documentation contenant des exemples de secrets (pédagogie S9)"
+# docs/securite.md montre une fausse clé AWS en exemple -> ne pas la traiter comme une fuite.
+# Les secrets réels dans le code (app/, scripts/...) restent, eux, détectés.
+paths = [
+  '''docs/securite\.md''',
+]
