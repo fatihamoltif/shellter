@@ -10,6 +10,12 @@ class BaseConfig:
     SQLALCHEMY_DATABASE_URI = os.getenv("DATABASE_URL", "sqlite:///shellter.db")
     SQLALCHEMY_TRACK_MODIFICATIONS = False
     SESSION_COOKIE_HTTPONLY = True          # cookie de session inaccessible au JS
+    # Cle Fernet pour chiffrer les mots de passe SSH au repos (module d'Imen).
+    # En prod : fournie par l'environnement. Defaut dev uniquement.
+    INSTANCE_ENCRYPTION_KEY = os.getenv(
+        "INSTANCE_ENCRYPTION_KEY",
+        "2NC-H59vV-_DzAajvYxi_NnNt66H3AMOX5YK64jFBCk=",
+    )
 
 
 class DevelopmentConfig(BaseConfig):

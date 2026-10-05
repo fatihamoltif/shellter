@@ -13,6 +13,7 @@ from flask_login import login_required, current_user
 from .models import db, Distribution, Instance, Rental, Worker
 from . import agent_client
 from .resource_manager import select_worker, pick_free_ssh_port, worker_is_full
+from .ssh_credentials import encrypt_password
 
 api_bp = Blueprint("api", __name__)
 
@@ -68,14 +69,16 @@ def rent():
         return jsonify(error="no_port_available"), 503
 
     # --- création instance + rental (pending -> creating) ---
-    ssh_secret = secrets.token_urlsafe(16)     # TODO S9 : stocker chiffré
+    # secret en clair pour le conteneur + remis une fois au client ;
+    # stocké CHIFFRÉ au repos (module ssh_credentials d'Imen).
+    ssh_secret = secrets.token_urlsafe(16)
     now = datetime.now(timezone.utc)
     instance = Instance(
         worker_id=worker.id,
         distribution_id=distro.id,
         ssh_port=port,
         ssh_user=SSH_USER,
-        ssh_secret=ssh_secret,
+        ssh_secret=encrypt_password(ssh_secret),
         status="creating",
     )
     db.session.add(instance)
