@@ -1,0 +1,62 @@
+{% extends "base.html" %}
+{% block title %}Admin — Distributions — Shellter{% endblock %}
+{% block content %}
+<h1>Administration — Distributions</h1>
+<p><a href="{{ url_for('dashboard.index') }}">← Retour au dashboard</a></p>
+
+<h2>Ajouter une distribution</h2>
+<form method="post" action="{{ url_for('admin.create_distribution') }}"
+      style="border:1px solid #ddd; border-radius:8px; padding:12px 16px;">
+  <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+  <label for="name">Nom</label>
+  <input id="name" name="name" placeholder="Ubuntu 24.04" required>
+  <label for="docker_image">Image Docker</label>
+  <input id="docker_image" name="docker_image" placeholder="ubuntu:24.04" required>
+  <label for="version">Version</label>
+  <input id="version" name="version" placeholder="24.04" required>
+  <button type="submit" class="btn" style="border:none;">Ajouter</button>
+</form>
+
+<h2 style="margin-top:28px;">Distributions existantes</h2>
+{% if distributions %}
+  <table style="border-collapse:collapse; width:100%;">
+    <thead>
+      <tr style="text-align:left; border-bottom:2px solid #ddd;">
+        <th style="padding:6px;">Nom</th>
+        <th style="padding:6px;">Image</th>
+        <th style="padding:6px;">Version</th>
+        <th style="padding:6px;">État</th>
+        <th style="padding:6px;">Action</th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for d in distributions %}
+        <tr style="border-bottom:1px solid #eee;">
+          <td style="padding:6px;">{{ d.name }}</td>
+          <td style="padding:6px;"><code>{{ d.docker_image }}</code></td>
+          <td style="padding:6px;">{{ d.version }}</td>
+          <td style="padding:6px;">
+            {% if d.status == "enabled" %}
+              <span style="color:#1e6b33;">activée</span>
+            {% else %}
+              <span style="color:#9b1c1c;">désactivée</span>
+            {% endif %}
+          </td>
+          <td style="padding:6px;">
+            <form method="post"
+                  action="{{ url_for('admin.toggle_distribution', distro_id=d.id) }}"
+                  style="margin:0;">
+              <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+              <button type="submit" style="margin:0; padding:4px 10px;">
+                {{ "Désactiver" if d.status == "enabled" else "Activer" }}
+              </button>
+            </form>
+          </td>
+        </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+{% else %}
+  <p>Aucune distribution.</p>
+{% endif %}
+{% endblock %}

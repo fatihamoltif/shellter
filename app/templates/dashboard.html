@@ -4,6 +4,13 @@
 <h1>Bonjour, {{ user.username }}</h1>
 <p>Email : {{ user.email }}</p>
 
+{% if user.is_admin %}
+<p>
+  <a class="btn" href="{{ url_for('admin.distributions') }}">Gérer les distributions</a>
+  <a class="btn" href="{{ url_for('monitoring.monitoring') }}">Monitoring</a>
+</p>
+{% endif %}
+
 <h2>Louer une instance</h2>
 <div style="border:1px solid #ddd; border-radius:8px; padding:12px 16px;">
   <label for="distro">Distribution</label>
@@ -31,13 +38,21 @@
   <ul id="instanceList">
     {% for instance in instances %}
       <li style="margin-bottom:12px;">
-        <strong>{{ instance.distribution }}</strong> — {{ instance.status }}<br>
+        <strong>{{ instance.distribution }}</strong> — {{ instance.status }}
+        {% if instance.expires_at %}— expire le {{ instance.expires_at }}{% endif %}<br>
         {% if instance.ssh_command %}
           <code>{{ instance.ssh_command }}</code><br>
           Mot de passe : <code>{{ instance.password }}</code><br>
         {% endif %}
-        <button type="button" class="stopBtn" data-id="{{ instance.id }}"
-                style="margin-top:6px;">Arrêter</button>
+        <div style="margin-top:6px;">
+          <button type="button" class="stopBtn" data-id="{{ instance.id }}">Arrêter</button>
+          <select class="extendDur" data-id="{{ instance.id }}">
+            <option value="30">+30 min</option>
+            <option value="60">+1 h</option>
+            <option value="120">+2 h</option>
+          </select>
+          <button type="button" class="extendBtn" data-id="{{ instance.id }}">Prolonger</button>
+        </div>
       </li>
     {% endfor %}
   </ul>
@@ -92,6 +107,27 @@ document.querySelectorAll(".stopBtn").forEach((btn) => {
     const id = btn.getAttribute("data-id");
     await fetch("/instances/" + id + "/stop", { method: "POST" });
     window.location.reload();
+  });
+});
+
+document.querySelectorAll(".extendBtn").forEach((btn) => {
+  btn.addEventListener("click", async () => {
+    const id = btn.getAttribute("data-id");
+    const sel = document.querySelector('.extendDur[data-id="' + id + '"]');
+    const duration_minutes = parseInt(sel.value, 10);
+    btn.disabled = true;
+    const resp = await fetch("/instances/" + id + "/extend", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ duration_minutes }),
+    });
+    if (resp.ok) {
+      window.location.reload();
+    } else {
+      const data = await resp.json().catch(() => ({}));
+      alert(data.message || "Prolongation impossible");
+      btn.disabled = false;
+    }
   });
 });
 </script>

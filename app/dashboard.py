@@ -42,6 +42,7 @@ def index():
     instances = []
     for inst in seen.values():
         worker = inst.worker
+        active_rental = next((r for r in inst.rentals if r.status == "ACTIVE"), None)
         instances.append({
             "id": inst.id,
             "distribution": inst.distribution.name if inst.distribution else "?",
@@ -51,6 +52,8 @@ def index():
                 if worker and inst.ssh_port else None
             ),
             "password": _reveal(inst.ssh_secret),
+            "expires_at": (active_rental.end_time.strftime("%Y-%m-%d %H:%M UTC")
+                           if active_rental else None),
         })
 
     return render_template("dashboard.html", user=current_user,

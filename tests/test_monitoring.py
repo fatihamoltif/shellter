@@ -7,6 +7,10 @@ from app.models import db, User, Worker
 def _login(client):
     client.post("/register", data={"username": "admin", "email": "admin@example.com",
                                     "password": "password123"}, follow_redirects=True)
+    # l'inscription crée un compte non-admin : on le promeut pour accéder au monitoring
+    user = User.query.filter_by(username="admin").first()
+    user.is_admin = True
+    db.session.commit()
     client.post("/login", data={"username": "admin", "password": "password123"},
                 follow_redirects=True)
 

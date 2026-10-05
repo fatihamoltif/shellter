@@ -1,21 +1,20 @@
 """Blueprint de supervision — Séance S10 (P4).
 
 /admin/monitoring : nombre d'instances actives, état + dernier heartbeat de chaque
-worker, santé des services. (Accès restreint : login requis ; le rôle admin sera
-ajouté plus tard — pour l'instant toute session connectée peut consulter.)
+worker, santé des services. Accès réservé aux administrateurs (admin_required).
 """
 from flask import Blueprint, jsonify
-from flask_login import login_required
 from sqlalchemy import func, text
 
 from .models import db, Worker, Instance
 from .resource_manager import ACTIVE_INSTANCE_STATUSES
+from .permissions import admin_required
 
 monitoring_bp = Blueprint("monitoring", __name__)
 
 
 @monitoring_bp.route("/admin/monitoring")
-@login_required
+@admin_required
 def monitoring():
     # santé des services
     try:

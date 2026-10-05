@@ -162,6 +162,11 @@ class User(UserMixin, db.Model):
         default=lambda: datetime.now(timezone.utc)
     )
 
+    # Rôle administrateur (accès monitoring + gestion des distributions).
+    is_admin = db.Column(db.Boolean, nullable=False, default=False)
+    # Quota : nombre maximum d'instances actives simultanées pour cet utilisateur.
+    max_instances = db.Column(db.Integer, nullable=False, default=3)
+
     def set_password(self, password):
         self.password_hash = generate_password_hash(password)
 

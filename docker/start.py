@@ -45,6 +45,15 @@ with app.app_context():
         db.session.add(User(username="demo", email="demo@example.com",
                             password_hash=generate_password_hash("password123")))
 
+    # Compte administrateur (gestion des distributions + monitoring).
+    admin = User.query.filter_by(username="admin").first()
+    if admin is None:
+        db.session.add(User(username="admin", email="admin@example.com",
+                            password_hash=generate_password_hash("admin123"),
+                            is_admin=True))
+    elif not admin.is_admin:
+        admin.is_admin = True
+
     # 3) worker fictif pointant sur l'agent mock (pour que /rent aboutisse en intégration)
     if os.getenv("SEED_MOCK_WORKER") == "1" and not Worker.query.filter_by(hostname="mock").first():
         db.session.add(Worker(

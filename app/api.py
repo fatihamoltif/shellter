@@ -58,6 +58,17 @@ def rent():
     if distro is None or distro.status != "enabled":
         return jsonify(error="not_found", message="Distribution inconnue ou désactivée."), 404
 
+    # --- quota par utilisateur ---
+    active_rentals = Rental.query.filter_by(
+        user_id=current_user.id, status="ACTIVE"
+    ).count()
+    if active_rentals >= current_user.max_instances:
+        return jsonify(
+            error="quota_exceeded",
+            message=(f"Quota atteint : {current_user.max_instances} instance(s) "
+                     "active(s) maximum par utilisateur."),
+        ), 403
+
     # --- choix du worker (Resource Manager) ---
     worker = select_worker()
     if worker is None:
@@ -154,6 +165,35 @@ def stop_instance(instance_id):
     db.session.commit()
 
     return jsonify(instance_id=instance.id, status="stopped", rental_status="CANCELLED"), 200
+
+
+@api_bp.route("/instances/<int:instance_id>/extend", methods=["POST"])
+@login_required
+def extend_instance(instance_id):
+    """Prolonge la location active d'une instance de duration_minutes."""
+    data = request.get_json(silent=True) or request.form
+    try:
+        duration = int(data.get("duration_minutes"))
+    except (TypeError, ValueError):
+        return jsonify(error="bad_request",
+                       message="duration_minutes requis (entier)."), 400
+    if duration not in ALLOWED_DURATIONS_MINUTES:
+        return jsonify(error="bad_request",
+                       message=f"Durée autorisée : {sorted(ALLOWED_DURATIONS_MINUTES)}."), 400
+
+    instance = db.session.get(Instance, instance_id)
+    if instance is None or not _owned_by(instance, current_user):
+        return jsonify(error="not_found"), 404
+
+    rental = next((r for r in instance.rentals if r.status == "ACTIVE"), None)
+    if rental is None:
+        return jsonify(error="not_extensible",
+                       message="Aucune location active pour cette instance."), 409
+
+    rental.end_time = rental.end_time + timedelta(minutes=duration)
+    db.session.commit()
+    return jsonify(instance_id=instance.id,
+                   expires_at=rental.end_time.isoformat()), 200
 
 
 def _owned_by(instance, user):
