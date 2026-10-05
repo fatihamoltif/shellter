@@ -80,4 +80,8 @@ with app.app_context():
     db.session.commit()
 
 # 4) démarrer le serveur
-os.execvp("gunicorn", ["gunicorn", "--bind", "0.0.0.0:5000", "--workers", "2", "wsgi:app"])
+# --timeout > AGENT_TIMEOUT : le 1er `rent` sur un worker peut builder l'image SSH
+# (plusieurs dizaines de secondes) ; sans ça, gunicorn tuerait le worker à 30 s.
+gunicorn_timeout = str(int(os.getenv("AGENT_TIMEOUT", "180")) + 20)
+os.execvp("gunicorn", ["gunicorn", "--bind", "0.0.0.0:5000", "--workers", "2",
+                       "--timeout", gunicorn_timeout, "wsgi:app"])
