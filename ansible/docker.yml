@@ -1,0 +1,53 @@
+---
+- name: Installation et configuration de Docker
+  hosts: all
+  become: yes
+  vars:
+    app_user: shellter
+  tasks:
+    - name: Installer les dépendances APT requises
+      apt:
+        name:
+          [
+            "apt-transport-https",
+            "ca-certificates",
+            "curl",
+            "gnupg",
+            "lsb-release",
+          ]
+        state: present
+        update_cache: yes
+
+    - name: Ajouter la clé GPG officielle de Docker
+      apt_key:
+        url: https://download.docker.com/linux/ubuntu/gpg
+        state: present
+
+    - name: Configurer le dépôt Docker pour Ubuntu Jammy
+      apt_repository:
+        repo: "deb [arch=amd64] https://download.docker.com/linux/ubuntu jammy stable"
+        state: present
+
+    - name: Installer Docker Engine et le plugin Compose
+      apt:
+        name:
+          [
+            "docker-ce",
+            "docker-ce-cli",
+            "containerd.io",
+            "docker-compose-plugin",
+          ]
+        state: present
+        update_cache: yes
+
+    - name: S'assurer que le service Docker est actif au démarrage
+      service:
+        name: docker
+        state: started
+        enabled: yes
+
+    - name: Ajouter l'utilisateur applicatif au groupe docker
+      user:
+        name: "{{ app_user }}"
+        groups: docker
+        append: yes

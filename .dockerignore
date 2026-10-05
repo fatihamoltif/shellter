@@ -1,0 +1,35 @@
+# Historique Git et fichiers locaux des VM
+.git/
+.vagrant/
+
+# Environnements Python et caches
+**/.venv/
+**/venv/
+**/__pycache__/
+**/*.pyc
+**/*.pyo
+**/.pytest_cache/
+
+# Fichiers de secrets et cles privees
+**/.env
+**/.env.*
+**/.ssh/
+**/private_key
+**/id_rsa
+**/id_ed25519
+**/*.key
+**/*.pem
+**/vault.yml
+**/.vault_pass*
+**/.vault_password*
+
+# Bases locales de developpement
+**/*.db
+**/*.db-*
+**/*.sqlite
+**/*.sqlite3
+
+# Configuration des editeurs et journaux
+.vscode/
+.idea/
+**/*.log

@@ -1,0 +1,20 @@
+rules:
+  - id: shellter-sql-injection-raw
+    languages: [python]
+    severity: ERROR
+    message: >-
+      Injection SQL : requête construite par f-string, concaténation ou .format().
+      Utilisez des requêtes paramétrées (bindparams) ou l'ORM SQLAlchemy.
+    metadata:
+      category: security
+      cwe: "CWE-89: SQL Injection"
+      owasp: "A03:2021 - Injection"
+    patterns:
+      - pattern-either:
+          - pattern: text(f"...")
+          - pattern: text("..." % $X)
+          - pattern: text("..." + $X)
+          - pattern: text("...".format(...))
+          - pattern: $S.execute(f"...")
+          - pattern: $S.execute("..." % $X)
+          - pattern: $S.execute("..." + $X)

@@ -1,0 +1,58 @@
+# Stack d'intégration pour la CI (S8, P4).
+# PostgreSQL + agent mock + Flask.
+
+services:
+  db:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_USER: shellter
+      POSTGRES_PASSWORD: shellter
+      POSTGRES_DB: shellter
+
+    healthcheck:
+      test:
+        - CMD-SHELL
+        - pg_isready -U shellter -d shellter
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  agent-mock:
+    build:
+      context: .
+      dockerfile: docker/Dockerfile
+
+    command:
+      - python
+      - docker/agent_mock.py
+
+  web:
+    build:
+      context: .
+      dockerfile: docker/Dockerfile
+
+    command:
+      - python
+      - docker/start.py
+
+    environment:
+      FLASK_CONFIG: development
+
+      # Valeur uniquement utilisée dans la stack CI éphémère.
+      SECRET_KEY: ci-secret
+
+      DATABASE_URL: postgresql+psycopg://shellter:shellter@db:5432/shellter
+
+      SEED_MOCK_WORKER: "1"
+
+      HEARTBEAT_TIMEOUT_SECONDS: "86400"
+
+    depends_on:
+      db:
+        condition: service_healthy
+
+      agent-mock:
+        condition: service_started
+
+    ports:
+      - "8080:5000"

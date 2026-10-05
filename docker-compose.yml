@@ -1,0 +1,130 @@
+# Configuration commune aux trois services Python.
+x-application: &application
+  image: shellter-web:local
+  build:
+    context: .
+    dockerfile: docker/Dockerfile
+  environment:
+    FLASK_CONFIG: integration
+    DATABASE_URL: "postgresql+psycopg://${DB_USER:?DB_USER manquant}:${DB_PASSWORD:?DB_PASSWORD manquant}@db:5432/${DB_NAME:?DB_NAME manquant}"
+    SECRET_KEY: "${SECRET_KEY:?SECRET_KEY manquante}"
+    EXPIRATION_CHECK_INTERVAL: "10"
+  networks:
+    - shellter_net
+
+services:
+  db:
+    image: postgres:16-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: "${DB_USER:?DB_USER manquant}"
+      POSTGRES_PASSWORD: "${DB_PASSWORD:?DB_PASSWORD manquant}"
+      POSTGRES_DB: "${DB_NAME:?DB_NAME manquant}"
+    volumes:
+      - db_data:/var/lib/postgresql/data
+    healthcheck:
+      test:
+        - CMD-SHELL
+        - 'pg_isready -U "$$POSTGRES_USER" -d "$$POSTGRES_DB"'
+      interval: 5s
+      timeout: 5s
+      retries: 10
+      start_period: 10s
+    networks:
+      - shellter_net
+
+  migrate:
+    <<: *application
+    restart: "no"
+    command:
+      - python
+      - -m
+      - flask
+      - --app
+      - app
+      - db
+      - upgrade
+    depends_on:
+      db:
+        condition: service_healthy
+
+  web:
+    <<: *application
+    restart: unless-stopped
+    depends_on:
+      db:
+        condition: service_healthy
+      migrate:
+        condition: service_completed_successfully
+    healthcheck:
+      test:
+        - CMD
+        - python
+        - -c
+        - "import urllib.request; urllib.request.urlopen('http://127.0.0.1:5000/health', timeout=3).close()"
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 20s
+
+  expiration:
+    <<: *application
+    restart: unless-stopped
+    command:
+      - python
+      - -m
+      - scripts.expiration_worker
+    depends_on:
+      db:
+        condition: service_healthy
+      migrate:
+        condition: service_completed_successfully
+
+  nginx:
+    image: nginx:alpine
+    restart: unless-stopped
+    ports:
+      - "80:80"
+    volumes:
+      - ./nginx/default.conf:/etc/nginx/conf.d/default.conf:ro
+    depends_on:
+      web:
+        condition: service_healthy
+    healthcheck:
+      test:
+        - CMD-SHELL
+        - "wget -q -T 3 -O /dev/null http://127.0.0.1/health || exit 1"
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
+    networks:
+      - shellter_net
+
+  image-ubuntu:
+    image: shellter-ubuntu:24.04
+    profiles: ["distros"]
+    build:
+      context: ./docker/distros/ubuntu24
+      dockerfile: Dockerfile
+
+  image-debian:
+    image: shellter-debian:13
+    profiles: ["distros"]
+    build:
+      context: ./docker/distros/debian13
+      dockerfile: Dockerfile
+
+  image-alpine:
+    image: shellter-alpine:latest
+    profiles: ["distros"]
+    build:
+      context: ./docker/distros/alpine
+      dockerfile: Dockerfile
+
+volumes:
+  db_data:
+
+networks:
+  shellter_net:
+    driver: bridge

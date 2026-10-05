@@ -1,0 +1,16 @@
+{% extends "base.html" %}
+{% block title %}Inscription — Shellter{% endblock %}
+{% block content %}
+<h1>Créer un compte</h1>
+<form method="post" action="{{ url_for('auth.register') }}">
+  {{ form.hidden_tag() }}   {# jeton CSRF #}
+  {{ form.username.label }} {{ form.username() }}
+  {% for e in form.username.errors %}<small style="color:#9b1c1c">{{ e }}</small>{% endfor %}
+  {{ form.email.label }} {{ form.email() }}
+  {% for e in form.email.errors %}<small style="color:#9b1c1c">{{ e }}</small>{% endfor %}
+  {{ form.password.label }} {{ form.password() }}
+  {% for e in form.password.errors %}<small style="color:#9b1c1c">{{ e }}</small>{% endfor %}
+  {{ form.submit(class="btn") }}
+</form>
+<p>Déjà un compte ? <a href="{{ url_for('auth.login') }}">Se connecter</a></p>
+{% endblock %}
