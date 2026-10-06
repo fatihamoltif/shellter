@@ -4,6 +4,8 @@ Page principale après connexion : infos utilisateur, liste des instances (vide 
 l'instant, remplie en S6), boutons « Louer une instance » et « Accéder à mon instance ».
 Protégé par login_required : pas de session -> redirection vers /login.
 """
+from datetime import timezone
+
 from flask import Blueprint, render_template
 from flask_login import login_required, current_user
 
@@ -14,6 +16,15 @@ dashboard_bp = Blueprint("dashboard", __name__)
 
 # Statuts d'instance à ne plus afficher dans « Mes instances ».
 _HIDDEN_STATUSES = ("stopped", "error", "deleted")
+
+
+def _utc_iso(dt):
+    """ISO 8601 en UTC (avec offset) pour conversion en heure locale côté navigateur."""
+    if dt is None:
+        return None
+    if dt.tzinfo is None:                 # datetime naïf (SQLite) -> on le marque UTC
+        dt = dt.replace(tzinfo=timezone.utc)
+    return dt.astimezone(timezone.utc).isoformat()
 
 
 @dashboard_bp.route("/dashboard")
@@ -42,8 +53,7 @@ def index():
                 if worker and inst.ssh_port else None
             ),
             "password": _reveal(inst.ssh_secret),
-            "expires_at": (active_rental.end_time.strftime("%Y-%m-%d %H:%M UTC")
-                           if active_rental else None),
+            "expires_at": _utc_iso(active_rental.end_time) if active_rental else None,
         })
 
     return render_template("dashboard.html", user=current_user,

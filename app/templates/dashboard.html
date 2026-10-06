@@ -39,7 +39,7 @@
     {% for instance in instances %}
       <li style="margin-bottom:12px;">
         <strong>{{ instance.distribution }}</strong> — {{ instance.status }}
-        {% if instance.expires_at %}— expire le {{ instance.expires_at }}{% endif %}<br>
+        {% if instance.expires_at %}— expire le <span class="localtime" data-utc="{{ instance.expires_at }}">{{ instance.expires_at }}</span>{% endif %}<br>
         {% if instance.ssh_command %}
           <code>{{ instance.ssh_command }}</code><br>
           Mot de passe : <code>{{ instance.password }}</code><br>
@@ -67,6 +67,14 @@
 </form>
 
 <script>
+// Dates d'expiration : stockées en UTC, affichées dans le fuseau du navigateur.
+document.querySelectorAll(".localtime").forEach(function (el) {
+  const d = new Date(el.getAttribute("data-utc"));
+  if (!isNaN(d)) {
+    el.textContent = d.toLocaleString();
+  }
+});
+
 // L'API /rent et /instances/<id>/stop sont exemptées de CSRF (blueprint api) ;
 // le cookie de session suffit pour l'authentification.
 const rentBtn = document.getElementById("rentBtn");
