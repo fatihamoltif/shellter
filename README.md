@@ -37,10 +37,14 @@ Le plan de contrôle contient les composants qui prennent les décisions et mém
 
 Il comprend :
 
-- **Flask**, qui fournit l'application web et reçoit les demandes des utilisateurs ;
-- **PostgreSQL**, qui conserve les informations sur les utilisateurs, les locations et les Workers ;
-- un **Provisioner**, chargé de créer et supprimer les conteneurs ;
-- un **Watchdog**, chargé de surveiller les expirations et les éventuelles pannes.
+- **Flask**, qui fournit l'application web, le **Resource Manager** (choix du worker) et l'API ;
+- **PostgreSQL**, qui conserve les utilisateurs, les locations et les Workers ;
+- **nginx**, reverse proxy et terminaison **HTTPS** ;
+- un **worker d'expiration**, qui détruit les conteneurs des locations échues ;
+- un **worker de reprise**, qui détecte les pannes (heartbeat) et relance les instances ailleurs.
+
+Le dialogue avec Docker passe toujours par un **Worker Agent** : Flask ne touche jamais directement
+le démon Docker d'un worker.
 
 ### 2. Le plan d'exécution
 
@@ -56,3 +60,34 @@ Worker 1
 ├── Conteneur Ubuntu - utilisateur A
 ├── Conteneur Ubuntu - utilisateur B
 └── Conteneur Debian - utilisateur C
+
+---
+
+## Fonctionnalités implémentées
+
+- **Comptes & sessions** : inscription, connexion, déconnexion (mots de passe hachés, CSRF).
+- **Location end-to-end** : choix distribution + durée → **vrai conteneur** sur un worker → **SSH réel**.
+- **Quota par utilisateur** : nombre maximum d'instances actives simultanées.
+- **Prolongation** d'une location en cours.
+- **Expiration automatique** : les conteneurs échus sont détruits tout seuls.
+- **Mots de passe SSH chiffrés au repos** (Fernet).
+- **Rôle administrateur** : monitoring + gestion des distributions (ajout / activation / désactivation).
+- **Haute disponibilité** : heartbeat réel des workers, détection de panne et **reprise automatique**
+  des instances sur un autre worker.
+- **Infrastructure reproductible** : 4 VM Vagrant, configuration Ansible, **HTTPS** (nginx + TLS).
+- **Qualité** : CI GitHub Actions (tests + scans sécurité), **migrations de base** (Flask-Migrate).
+
+---
+
+## Accès (déploiement VM)
+
+| Accès | URL |
+|---|---|
+| Application (HTTPS, certificat auto-signé) | `https://192.168.56.10` |
+| HTTP direct (debug) | `http://192.168.56.10:8080` |
+
+Comptes de démonstration : **admin** `admin` / `admin123` — **utilisateur** `demo` / `password123`.
+
+Déploiement : `cd ansible && ansible-playbook -i hosts.ini deploy.yml --ask-vault-pass`.
+
+Tests : `pytest -q` (55 tests).

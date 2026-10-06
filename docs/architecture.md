@@ -84,10 +84,10 @@ Réseau privé Vagrant : `192.168.56.0/24` (host-only).
 |---|---|---|---|---|
 | Accès utilisateur | client | controller (Nginx) | **443** | HTTPS |
 | Redirection | client | controller (Nginx) | 80 → 443 | HTTP → HTTPS |
-| Reverse proxy | Nginx | Flask | 8000 (interne) | HTTP |
+| Reverse proxy | Nginx | Flask (gunicorn) | 5000 (interne Compose) | HTTP |
 | Accès base | Flask | PostgreSQL | 5432 (interne Compose) | TCP |
-| Pilotage conteneurs | Flask / Resource Manager | Worker Agent | 5000 (interne) | HTTP + token |
-| Register / heartbeat | Worker Agent | Flask | 443 | HTTPS + token |
+| Pilotage conteneurs | Flask / Resource Manager | Worker Agent | 5000 (réseau privé) | HTTP |
+| Heartbeat / enregistrement | Worker Agent | Flask | 8080 | HTTP (réseau privé) |
 | Accès instance louée | client | worker `192.168.56.1x` | plage SSH ex. **20000–30000** | SSH |
 
 > Le socket Docker (`/var/run/docker.sock`) reste **local** à chaque worker : jamais exposé sur le réseau.
@@ -105,16 +105,26 @@ location (aucun mot de passe figé dans l'image).
 
 ## Rôle des outils
 
-| Outil | Usage |
+| Outil / composant | Usage |
 |---|---|
 | Vagrant | Création reproductible des 4 VM + réseau privé |
-| Ansible | `site.yml`, `docker.yml`, `worker.yml`, `deploy.yml`, durcissement SSH, Vault |
+| Ansible | `deploy.yml` (DNS durable, agents, certs TLS, compose), `site.yml`, Vault |
 | Docker Compose | Stack du controller en une commande, healthchecks, redémarrage auto |
-| Worker Agent | Enregistrement, heartbeat, création / suppression / surveillance des conteneurs |
+| Worker Agent | Conteneur Docker (socket monté) : heartbeat + création / suppression des conteneurs |
 | Nginx | Reverse proxy + terminaison TLS (HTTPS) |
+| Worker d'expiration | Service de fond : détruit les conteneurs des locations échues |
+| Worker de reprise | Service de fond : détecte les workers `OFFLINE` (heartbeat) et relance leurs instances |
+| Flask-Migrate | Migrations versionnées de la base (`flask db upgrade` au démarrage) |
 
-## À clarifier avec l'enseignante (S2)
+## Composants du control plane (Docker Compose, VM controller)
 
-- Vagrant sert-il seulement au développement, ou aussi à la démonstration finale ?
-- Un certificat auto-signé suffit-il pour le HTTPS ?
-- Le registre privé peut-il être celui de GitHub / GitLab ?
+`db` (PostgreSQL) · `web` (Flask/gunicorn + Resource Manager) · `nginx` (HTTPS) ·
+`expiration-worker` · `recovery-worker`.
+
+## Décisions prises
+
+- **Vagrant** sert au développement **et** à la démonstration (déploiement réel sur les 4 VM).
+- **HTTPS** : certificat **auto-signé** généré par Ansible (`openssl`), suffisant pour le cadre du projet.
+- **Worker Agent** : déployé en **conteneur Docker** (socket Docker monté), pas en service systemd.
+- **Heartbeat** : sans token, sur le **réseau privé host-only** entre VM (`192.168.56.0/24`).
+- **DNS** : serveurs upstream fixés dans `systemd-resolved` (drop-in Ansible), durable au reboot.

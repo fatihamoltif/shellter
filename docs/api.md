@@ -21,9 +21,9 @@
 |---|---|---|
 | `public` | aucun | `/health`, `/register`, `/login` |
 | `connecté` | cookie de session Flask-Login (`HttpOnly`, `Secure` en prod) | dashboard, location |
-| `propriétaire` | connecté **et** propriétaire de la ressource | `/instances/{id}/stop` |
-| `admin` | rôle admin en session | `/admin/monitoring`, liste des workers |
-| `token agent` | en-tête `Authorization: Bearer <AGENT_TOKEN>` | `/workers/register`, `/workers/heartbeat` |
+| `propriétaire` | connecté **et** propriétaire de la ressource | `/instances/{id}/stop`, `/instances/{id}/extend` |
+| `admin` | rôle admin en session (`User.is_admin`) | `/admin/monitoring`, `/admin/distributions` |
+| `agent` | réseau privé host-only entre VM (pas de token) | `/workers/heartbeat` |
 
 ### 1.2 Codes HTTP utilisés
 
@@ -154,13 +154,35 @@ demande le conteneur à l'agent.
 > **Note** — `expires_at` renvoyé ici correspond à `rentals.end_time` (calculé à partir de
 > `duration_minutes`), pas à un champ de `instances`.
 
+La réponse de création renvoie aussi, **une seule fois**, `ssh_password` (le secret est stocké
+**chiffré** au repos côté base).
+
 - **`400`** : `distribution_id` ou `duration_minutes` manquant / invalide.
+- **`403`** : `{ "error": "quota_exceeded" }` — l'utilisateur a atteint son quota (`User.max_instances`).
 - **`404`** : distribution inconnue ou `disabled`.
 - **`503`** : `{ "error": "worker_unavailable" }` — aucun worker `AVAILABLE`.
+
+### `POST /instances/{id}/extend` — *propriétaire*
+Prolonge la location active de l'instance : `rentals.end_time` repoussé de `duration_minutes`.
+
+| Champ | Type | Règle |
+|---|---|---|
+| `duration_minutes` | int | valeur parmi la liste autorisée (30 / 60 / 120) |
+
+- **`200`** : `{ "instance_id": 12, "expires_at": "2026-10-05T18:30:00Z" }`
+- **`400`** : `duration_minutes` manquant / invalide.
+- **`404`** : instance inexistante ou appartenant à un autre utilisateur.
+- **`409`** : `{ "error": "not_extensible" }` — aucune location active pour cette instance.
 
 ---
 
 ## 6. Workers (supervision & agents)
+
+> **Note d'implémentation (S11)** — La version déployée simplifie le contrat v1 : il existe **un seul
+> endpoint** `POST /workers/heartbeat` qui fait aussi l'**enregistrement** (upsert). Les agents
+> s'auto-enregistrent dès leur premier heartbeat ; pas d'endpoint `/workers/register` séparé ni de
+> liste `GET /workers` (l'état des workers est exposé par `/admin/monitoring`). Le heartbeat n'utilise
+> **pas** de token (réseau privé host-only entre VM).
 
 ### `GET /workers` — *admin*
 Liste des workers et de leur état.
@@ -190,20 +212,35 @@ Un worker s'enregistre au démarrage (ou met à jour ses infos).
 - **`200`** : worker déjà connu, mis à jour.
 - **`401`** : token agent absent ou invalide.
 
-### `POST /workers/heartbeat` — *token agent*
-Signal de vie périodique (toutes les 10 s) + charge.
+### `POST /workers/heartbeat` — *agent (réseau privé)*
+Signal de vie périodique (toutes les 10 s) **et** enregistrement (upsert).
 
 | Champ | Type |
 |---|---|
-| `hostname` | string |
-| `cpu_load` | float |
-| `memory_used` | int (Mo) |
-| `containers` | int |
+| `hostname` | string (clé d'upsert) |
+| `ip` | string |
+| `agent_url` | string (URL interne de l'agent) |
+| `max_instances` | int |
 
-- **`200`** : `last_heartbeat` mis à jour ; un worker `OFFLINE` qui redonne signe repasse `AVAILABLE`.
-- **`401`** : token invalide.
+- **`200`** : `{ "status": "ok", "worker_id": 1, "created": false }`. Worker (ré)enregistré,
+  `last_heartbeat` rafraîchi ; un worker `OFFLINE` qui redonne signe repasse `AVAILABLE`.
+- **`400`** : `hostname` manquant.
 
-*(Côté Flask : un worker sans heartbeat depuis > 30 s passe `OFFLINE` — logique de S7.)*
+*(Côté Flask : un worker sans heartbeat depuis > `HEARTBEAT_TIMEOUT_SECONDS` (60 s en prod) passe
+`OFFLINE` ; le worker de reprise relance alors ses instances sur un autre worker.)*
+
+---
+
+## 6bis. Administration des distributions — *admin*
+
+### `GET /admin/distributions`
+Page de gestion : liste des distributions + formulaire d'ajout. **`200`** (HTML) / **`403`** si non-admin.
+
+### `POST /admin/distributions`
+Ajoute une distribution (`name`, `docker_image`, `version`), créée `enabled`. **`302`** → la page.
+
+### `POST /admin/distributions/{id}/toggle`
+Bascule `enabled` ⇄ `disabled`. **`302`** → la page / **`404`** si inconnue.
 
 ### `GET /admin/monitoring` — *admin* — **(S10)** — *extension d'équipe*
 Dashboard de supervision : instances actives, état + dernier heartbeat de chaque worker, santé
@@ -236,10 +273,15 @@ des services. **`200`** (HTML ou JSON selon l'implémentation retenue en S10).
 | 4 | POST | `/logout` | connecté |
 | 5 | GET | `/dashboard` | connecté |
 | 6 | GET | `/instances` | connecté |
-| 7 | POST | `/rent` | connecté |
+| 7 | POST | `/rent` | connecté (quota) |
 | 8 | POST | `/instances/{id}/stop` | propriétaire |
-| 9 | GET | `/workers` | admin |
-| 10 | GET | `/workers/{id}` | admin |
-| 11 | POST | `/workers/register` | token agent |
-| 12 | POST | `/workers/heartbeat` | token agent |
-| 13 | GET | `/admin/monitoring` | admin (S10) |
+| 9 | POST | `/instances/{id}/extend` | propriétaire |
+| 10 | POST | `/workers/heartbeat` | agent (upsert) |
+| 11 | GET | `/admin/monitoring` | admin |
+| 12 | GET | `/admin/distributions` | admin |
+| 13 | POST | `/admin/distributions` | admin |
+| 14 | POST | `/admin/distributions/{id}/toggle` | admin |
+
+> Les routes du contrat v1 `GET /workers`, `GET /workers/{id}` et `POST /workers/register` n'ont pas
+> été retenues : l'enregistrement est fait par `/workers/heartbeat`, et l'état des workers est exposé
+> par `/admin/monitoring`.

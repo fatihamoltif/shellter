@@ -15,6 +15,7 @@ comment le tester, et la preuve obtenue.
 | [S8](S8-ci.md) | Déploiement complet & CI | Tests d'intégration (docker compose) | CI verte (2 jobs) | ✅ |
 | [S9](S9-securite.md) | Sécurité intégrée (DevSecOps) | Commit piège `demo-vuln` + docs | 3 échecs distincts | ✅ |
 | [S10](S10-prod-monitoring.md) | Prod & monitoring | `/admin/monitoring` + smoke test + rollback | smoke OK, rollback simulé | ✅ |
+| [S11](S11-features-avancees.md) | Consolidation `main` & features avancées | Intégration équipe + quota, prolongation, rôle admin, heartbeat réel, migrations, HTTPS, DNS durable | Tout vérifié **en live** (55 tests) | ✅ |
 
 ## Documents de référence (hors journal)
 - Contrat d'API : [`docs/api.md`](../api.md)
@@ -23,5 +24,7 @@ comment le tester, et la preuve obtenue.
 - Usage opérationnel Ansible : [`ansible/README.md`](../../ansible/README.md)
 
 ## Dépôt & branche
-Tout mon travail est sur la branche **`alijamai`** de `fatihamoltif/shellter`. La CI (GitHub Actions)
-est verte pour les séances S4, S5 et S6.
+Les séances S1→S10 ont été développées sur ma branche **`alijamai`** (`fatihamoltif/shellter`).
+Depuis la S11, le projet est **consolidé sur `main`** : la branche fonctionnelle a été mergée, les
+apports des coéquipiers intégrés (paternité git préservée) et les fonctionnalités avancées ajoutées.
+La CI (GitHub Actions) tourne à chaque push ; la suite compte **55 tests**.

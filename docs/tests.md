@@ -128,3 +128,29 @@ Copier ce gabarit pour chaque exécution de test. Il doit être **suivable sans 
 - **E2E** : navigateur/curl → Nginx → Flask → agent → Docker → SSH → expiration.
 - **Panne** : worker OFFLINE, conteneur tué, base indisponible, port occupé, image invalide.
 - **Redéploiement** : infra détruite puis recréée depuis le dépôt (T16).
+
+---
+
+## 7. État de la recette (S11)
+
+### Tests automatisés — `pytest -q` → **55 tests** ✅
+`test_models`, `test_auth`, `test_rent`, `test_recovery`, `test_monitoring`, `test_health`,
+`test_admin` (quota, prolongation, accès admin, rendu dashboard), `test_heartbeat`,
+`test_crypto_expiration`. CI GitHub Actions : tests + intégration + scans sécurité (Semgrep,
+gitleaks, Trivy).
+
+### Vérifications manuelles effectuées **en live** (déploiement VM)
+| Test | Résultat |
+|---|---|
+| `/health` HTTP **et HTTPS** (nginx/TLS) | ✅ |
+| Location Ubuntu **et Debian** → conteneur réel → SSH | ✅ |
+| Prolongation (`+60 min`) | ✅ |
+| Quota (3 OK, 4ᵉ → 403) | ✅ |
+| Rôle admin (user → 403, admin → 200) + gestion distributions | ✅ |
+| Expiration automatique (conteneur détruit par le worker de fond) | ✅ |
+| **Panne** : agent worker tué → `OFFLINE` → instance recréée ailleurs → SSH OK | ✅ |
+| DNS durable après **reboot** d'un worker | ✅ |
+
+> ⚠️ **À savoir pour la démo** : le **premier** `Louer` d'une distribution sur un worker « froid »
+> construit son image SSH (plusieurs dizaines de secondes). Les timeouts gunicorn **et** nginx sont
+> réglés en conséquence ; les locations suivantes de la même distro sont quasi instantanées.
