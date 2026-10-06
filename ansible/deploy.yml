@@ -6,7 +6,7 @@
 #
 # Lancement :  cd ansible && ansible-playbook -i hosts.ini deploy.yml --ask-vault-pass
 
-- name: Résolution DNS fiable et durable (évite l'échec de pull d'images)
+- name: Hygiène des VM — DNS fiable et horloge synchronisée (durable)
   hosts: all
   become: true
   tasks:
@@ -50,6 +50,36 @@
       retries: 3
       delay: 2
       until: dns_check.rc == 0
+
+    # --- Horloge synchronisée (durable) ---
+    # Les horloges des VM dérivent après suspension/reprise ; un décalage casse la
+    # vérification des signatures APT (ex. Debian « Not live until … » -> build KO).
+    # chrony atteint bien les serveurs NTP via le NAT ; on l'autorise à corriger
+    # même un gros écart au démarrage (makestep), ce qui rend la correction durable.
+    - name: Autoriser chrony à corriger de gros décalages au démarrage (makestep)
+      ansible.builtin.blockinfile:
+        path: /etc/chrony/chrony.conf
+        marker: "# {mark} SHELLTER makestep"
+        block: |
+          # Corrige l'horloge quelle que soit l'ampleur du décalage (VM suspendue / rebootée)
+          makestep 1 -1
+      register: chrony_conf
+
+    - name: Activer la synchronisation NTP
+      ansible.builtin.command: timedatectl set-ntp true
+      changed_when: false
+
+    - name: (Re)démarrer chrony (activé au boot)
+      ansible.builtin.systemd:
+        name: chrony
+        enabled: true
+        state: restarted
+      when: chrony_conf.changed
+
+    - name: Forcer une correction immédiate de l'horloge
+      ansible.builtin.command: chronyc makestep
+      changed_when: false
+      failed_when: false
 
 
 - name: Déployer les Worker Agents sur les workers
