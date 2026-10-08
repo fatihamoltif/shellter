@@ -166,10 +166,10 @@ def _cluster_worker():
 def _ssh_image_for(distro):
     img = (distro.docker_image or "").lower()
     if "debian" in img:
-        return os.getenv("SSH_IMAGE_DEBIAN", "ghcr.io/jamaiali/shellter-ssh-debian:latest")
+        return os.getenv("SSH_IMAGE_DEBIAN", "ghcr.io/fatihamoltif/shellter-ssh-debian:latest")
     if "alpine" in img:
-        return os.getenv("SSH_IMAGE_ALPINE", "ghcr.io/jamaiali/shellter-ssh-alpine:latest")
-    return os.getenv("SSH_IMAGE_UBUNTU", "ghcr.io/jamaiali/shellter-ssh-ubuntu:latest")
+        return os.getenv("SSH_IMAGE_ALPINE", "ghcr.io/fatihamoltif/shellter-ssh-alpine:latest")
+    return os.getenv("SSH_IMAGE_UBUNTU", "ghcr.io/fatihamoltif/shellter-ssh-ubuntu:latest")
 
 
 def _rent_k8s(distro, duration):

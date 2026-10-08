@@ -29,7 +29,7 @@ spec:
     spec:
       containers:
         - name: ssh
-          image: <IMAGE>            # ex. ghcr.io/jamaiali/shellter-ssh-ubuntu:latest
+          image: <IMAGE>            # ex. ghcr.io/fatihamoltif/shellter-ssh-ubuntu:latest
           ports:
             - containerPort: 22
           env:

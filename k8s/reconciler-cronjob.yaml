@@ -16,7 +16,7 @@ spec:
           restartPolicy: Never
           containers:
             - name: reconciler
-              image: ghcr.io/jamaiali/shellter-flask:latest
+              image: ghcr.io/fatihamoltif/shellter-flask:latest
               command: ["python", "scripts/k8s_reconciler.py"]
               envFrom:
                 - configMapRef:

@@ -19,7 +19,7 @@ spec:
       serviceAccountName: shellter-api
       containers:
         - name: flask
-          image: ghcr.io/jamaiali/shellter-flask:latest
+          image: ghcr.io/fatihamoltif/shellter-flask:latest
           command: ["python", "docker/start.py"]   # attend la DB, migre, seed, lance gunicorn
           ports:
             - containerPort: 5000

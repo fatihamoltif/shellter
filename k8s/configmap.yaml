@@ -15,6 +15,6 @@ data:
   # Namespace où créer les environnements loués.
   SHELLTER_NAMESPACE: "shellter"
   # Images SSH par distribution (poussées au registre, séance K3/P1).
-  SSH_IMAGE_UBUNTU: "ghcr.io/jamaiali/shellter-ssh-ubuntu:latest"
-  SSH_IMAGE_DEBIAN: "ghcr.io/jamaiali/shellter-ssh-debian:latest"
-  SSH_IMAGE_ALPINE: "ghcr.io/jamaiali/shellter-ssh-alpine:latest"
+  SSH_IMAGE_UBUNTU: "ghcr.io/fatihamoltif/shellter-ssh-ubuntu:latest"
+  SSH_IMAGE_DEBIAN: "ghcr.io/fatihamoltif/shellter-ssh-debian:latest"
+  SSH_IMAGE_ALPINE: "ghcr.io/fatihamoltif/shellter-ssh-alpine:latest"
