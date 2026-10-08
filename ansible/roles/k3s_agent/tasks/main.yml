@@ -1,0 +1,28 @@
+---
+# Tâche Ansible pour installer k3s agent sur les workers
+# P2 - K1
+
+- name: Vérifier si l'agent k3s est déjà installé
+  stat:
+    path: /usr/local/bin/k3s
+  register: k3s_bin
+
+- name: Télécharger le script d'installation de k3s
+  get_url:
+    url: https://get.k3s.io
+    dest: /tmp/k3s_install.sh
+    mode: '0755'
+  when: not k3s_bin.stat.exists
+
+- name: Installer k3s agent
+  shell: /tmp/k3s_install.sh agent --node-ip {{ ansible_host }}
+  environment:
+    K3S_URL: "https://192.168.56.10:6443"
+    K3S_TOKEN: "{{ hostvars['controller']['k3s_token'] }}"
+  when: not k3s_bin.stat.exists
+
+- name: S'assurer que le service k3s-agent est démarré et activé
+  systemd:
+    name: k3s-agent
+    state: started
+    enabled: yes
