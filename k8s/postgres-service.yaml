@@ -1,0 +1,13 @@
+# Service headless (partie P2, séance K2) — adresse stable "postgres" pour Flask.
+apiVersion: v1
+kind: Service
+metadata:
+  name: postgres
+  namespace: shellter
+spec:
+  clusterIP: None
+  selector:
+    app: postgres
+  ports:
+    - port: 5432
+      targetPort: 5432

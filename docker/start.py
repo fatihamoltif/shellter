@@ -92,7 +92,14 @@ with app.app_context():
                 worker.agent_url = f"http://{ip}:5000"
                 worker.last_heartbeat = datetime.now(timezone.utc)
 
-    db.session.commit()
+    # Course possible entre répliques (K8s : 2 pods Flask seedent en parallèle).
+    # Une seule insertion gagne ; l'autre attrape le conflit et l'ignore.
+    from sqlalchemy.exc import IntegrityError
+    try:
+        db.session.commit()
+    except IntegrityError:
+        db.session.rollback()
+        print("[start] seed déjà effectué par une autre réplique -> ignoré", flush=True)
 
 # 4) démarrer le serveur
 # --timeout > AGENT_TIMEOUT : le 1er `rent` sur un worker peut builder l'image SSH

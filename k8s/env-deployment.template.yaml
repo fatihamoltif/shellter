@@ -13,6 +13,8 @@ metadata:
   labels:
     app: shellter-env
     shellter.instance_id: "<ID>"
+  annotations:
+    # expires_at (ISO, contient ':' et '+') -> annotation, PAS label (valeurs interdites)
     shellter.expires_at: "<EXPIRES_AT>"
 spec:
   replicas: 1

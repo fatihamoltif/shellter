@@ -1,0 +1,6 @@
+---
+# IP du serveur k3s à rejoindre.
+k3s_server_ip: "192.168.56.10"
+# IP privée de ce nœud agent.
+k3s_node_ip: "{{ ansible_host }}"
+# k3s_token : fourni par le play (hostvars du controller) — pas de valeur par défaut.
