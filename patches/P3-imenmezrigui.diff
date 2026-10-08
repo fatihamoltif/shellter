@@ -1,0 +1,190 @@
+commit cc47cedfa08bdc9569b616a9f1c7f5e3ef240fde
+Author: JamaiAli <alito.lhw@gmail.com>
+Date:   Thu Oct 8 15:19:13 2026 +0200
+
+    k8s(P3): Deployment Flask (probes) + expiration (CronJob reaper)
+
+diff --git a/k8s/expiration-cronjob.yaml b/k8s/expiration-cronjob.yaml
+new file mode 100644
+index 0000000..fbd9a1b
+--- /dev/null
++++ b/k8s/expiration-cronjob.yaml
+@@ -0,0 +1,37 @@
++# Expiration (partie P3, séance K4) — CronJob qui supprime les locations échues.
++# Tourne sous shellter-api (droits de suppression Deployment/Service).
++apiVersion: batch/v1
++kind: CronJob
++metadata:
++  name: shellter-reaper
++  namespace: shellter
++spec:
++  schedule: "*/1 * * * *"         # toutes les minutes
++  concurrencyPolicy: Forbid
++  jobTemplate:
++    spec:
++      activeDeadlineSeconds: 120
++      template:
++        spec:
++          serviceAccountName: shellter-api
++          restartPolicy: Never
++          containers:
++            - name: reaper
++              image: ghcr.io/jamaiali/shellter-flask:latest
++              command: ["python", "scripts/k8s_reaper.py"]
++              envFrom:
++                - configMapRef:
++                    name: shellter-config
++              env:
++                - name: POSTGRES_PASSWORD
++                  valueFrom:
++                    secretKeyRef:
++                      name: shellter-secrets
++                      key: POSTGRES_PASSWORD
++                - name: DATABASE_URL
++                  value: "postgresql://shellter:$(POSTGRES_PASSWORD)@postgres:5432/shellter"
++                - name: INSTANCE_ENCRYPTION_KEY
++                  valueFrom:
++                    secretKeyRef:
++                      name: shellter-secrets
++                      key: INSTANCE_ENCRYPTION_KEY
+diff --git a/k8s/flask-deployment.yaml b/k8s/flask-deployment.yaml
+new file mode 100644
+index 0000000..d0ebfe8
+--- /dev/null
++++ b/k8s/flask-deployment.yaml
+@@ -0,0 +1,65 @@
++# Flask (partie P3, séance K2) — control plane applicatif.
++# Tourne sous le ServiceAccount shellter-api (droits K8s pour piloter les locations).
++# L'image est taguée par SHA de commit par la CI (séance K5) ; :latest en dev.
++apiVersion: apps/v1
++kind: Deployment
++metadata:
++  name: flask
++  namespace: shellter
++spec:
++  replicas: 2
++  selector:
++    matchLabels:
++      app: flask
++  template:
++    metadata:
++      labels:
++        app: flask
++    spec:
++      serviceAccountName: shellter-api
++      containers:
++        - name: flask
++          image: ghcr.io/jamaiali/shellter-flask:latest
++          command: ["python", "docker/start.py"]   # attend la DB, migre, seed, lance gunicorn
++          ports:
++            - containerPort: 5000
++          envFrom:
++            - configMapRef:
++                name: shellter-config
++          env:
++            - name: POSTGRES_PASSWORD
++              valueFrom:
++                secretKeyRef:
++                  name: shellter-secrets
++                  key: POSTGRES_PASSWORD
++            # $(POSTGRES_PASSWORD) est interpolé par Kubernetes (env dépendant).
++            - name: DATABASE_URL
++              value: "postgresql://shellter:$(POSTGRES_PASSWORD)@postgres:5432/shellter"
++            - name: SECRET_KEY
++              valueFrom:
++                secretKeyRef:
++                  name: shellter-secrets
++                  key: SECRET_KEY
++            - name: INSTANCE_ENCRYPTION_KEY
++              valueFrom:
++                secretKeyRef:
++                  name: shellter-secrets
++                  key: INSTANCE_ENCRYPTION_KEY
++          readinessProbe:
++            httpGet:
++              path: /health
++              port: 5000
++            initialDelaySeconds: 10
++            periodSeconds: 5
++          livenessProbe:
++            httpGet:
++              path: /health
++              port: 5000
++            initialDelaySeconds: 20
++            periodSeconds: 10
++          resources:
++            requests:
++              cpu: "100m"
++              memory: "128Mi"
++            limits:
++              memory: "512Mi"
+diff --git a/k8s/flask-service.yaml b/k8s/flask-service.yaml
+new file mode 100644
+index 0000000..72a9e0e
+--- /dev/null
++++ b/k8s/flask-service.yaml
+@@ -0,0 +1,13 @@
++# Service Flask (partie P3, séance K2) — ClusterIP ciblé par l'Ingress.
++apiVersion: v1
++kind: Service
++metadata:
++  name: flask
++  namespace: shellter
++spec:
++  selector:
++    app: flask
++  ports:
++    - name: http
++      port: 80
++      targetPort: 5000
+diff --git a/scripts/k8s_reaper.py b/scripts/k8s_reaper.py
+new file mode 100644
+index 0000000..6d85ef2
+--- /dev/null
++++ b/scripts/k8s_reaper.py
+@@ -0,0 +1,45 @@
++"""Reaper d'expiration (partie P3, séance K4) — version Kubernetes.
++
++Exécuté périodiquement par un CronJob (k8s/expiration-cronjob.yaml). Supprime, pour
++chaque location échue, le Deployment + Service K8s, puis met la base à jour
++(rental -> EXPIRED, instance -> deleted). Équivalent K8s de expiration_manager.
++"""
++import logging
++from datetime import datetime, timezone
++
++from app import create_app
++from app.models import db, Rental
++from app import k8s_client
++
++logging.basicConfig(level=logging.INFO)
++
++
++def reap_once():
++    now = datetime.now(timezone.utc)
++    expired = Rental.query.filter(
++        Rental.status == "ACTIVE", Rental.end_time <= now).all()
++    count = 0
++    for rental in expired:
++        inst = rental.instance
++        try:
++            if inst is not None:
++                k8s_client.delete_env(inst.id)
++                inst.status = "deleted"
++            rental.status = "EXPIRED"
++            db.session.commit()
++            count += 1
++            logging.info("rental %s expiré -> env supprimé", rental.id)
++        except Exception:
++            db.session.rollback()
++            logging.exception("échec d'expiration du rental %s", rental.id)
++    return count
++
++
++def main():
++    app = create_app()
++    with app.app_context():
++        logging.info("%s location(s) expirée(s)", reap_once())
++
++
++if __name__ == "__main__":
++    main()

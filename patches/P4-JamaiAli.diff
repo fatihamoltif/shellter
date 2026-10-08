@@ -1,0 +1,659 @@
+commit 679e5b9bc4ac1a2fcc5499db4ccb1a774ee5e746
+Author: JamaiAli <alito.lhw@gmail.com>
+Date:   Thu Oct 8 15:19:24 2026 +0200
+
+    k8s(P4): Ingress HTTPS, /rent+stop via API K8s, reconciliation, CI k8s, docs
+
+diff --git a/.github/workflows/k8s-ci.yml b/.github/workflows/k8s-ci.yml
+new file mode 100644
+index 0000000..50a0d2c
+--- /dev/null
++++ b/.github/workflows/k8s-ci.yml
+@@ -0,0 +1,106 @@
++name: CI Kubernetes
++
++# Pipeline de la branche kubernetes (séance K5) :
++#   lint des manifests (P3) -> build & push des images (P1) -> scan Trivy (P3)
++#   -> déploiement sur le cluster (P2, seulement si le secret KUBECONFIG est fourni).
++
++on:
++  push:
++    branches: [kubernetes]
++  pull_request:
++    branches: [kubernetes]
++
++env:
++  REGISTRY: ghcr.io
++  IMAGE_PREFIX: ${{ github.repository_owner }}/shellter
++
++jobs:
++  # ---- P3 : conformité des manifests ------------------------------------- #
++  lint-manifests:
++    runs-on: ubuntu-latest
++    steps:
++      - uses: actions/checkout@v4
++      - name: Installer kubeconform
++        run: |
++          curl -sSLo kubeconform.tar.gz https://github.com/yannh/kubeconform/releases/download/v0.6.7/kubeconform-linux-amd64.tar.gz
++          tar xf kubeconform.tar.gz && sudo mv kubeconform /usr/local/bin/
++      - name: Valider les manifests (hors gabarits *.template.yaml)
++        run: |
++          find k8s -name '*.yaml' ! -name '*.template.yaml' -print0 \
++            | xargs -0 kubeconform -strict -ignore-missing-schemas -summary
++
++  # ---- P1 : build & push des images (Flask + 3 distros SSH) -------------- #
++  build-images:
++    runs-on: ubuntu-latest
++    permissions:
++      contents: read
++      packages: write
++    steps:
++      - uses: actions/checkout@v4
++      - uses: docker/setup-buildx-action@v3
++      - name: Login GHCR
++        uses: docker/login-action@v3
++        with:
++          registry: ${{ env.REGISTRY }}
++          username: ${{ github.actor }}
++          password: ${{ secrets.GITHUB_TOKEN }}
++      - name: Build & push image Flask
++        uses: docker/build-push-action@v6
++        with:
++          context: .
++          file: docker/Dockerfile
++          push: true
++          tags: |
++            ${{ env.REGISTRY }}/${{ env.IMAGE_PREFIX }}-flask:${{ github.sha }}
++            ${{ env.REGISTRY }}/${{ env.IMAGE_PREFIX }}-flask:latest
++      - name: Build & push images SSH (ubuntu / debian / alpine)
++        run: |
++          for d in "ubuntu:24.04:ubuntu" "debian:13:debian" "alpine:latest:alpine"; do
++            base="${d%:*}"; name="${d##*:}"
++            docker build --build-arg BASE="$base" \
++              -t ${REGISTRY}/${IMAGE_PREFIX}-ssh-${name}:${{ github.sha }} \
++              -t ${REGISTRY}/${IMAGE_PREFIX}-ssh-${name}:latest docker/ssh
++            docker push ${REGISTRY}/${IMAGE_PREFIX}-ssh-${name}:${{ github.sha }}
++            docker push ${REGISTRY}/${IMAGE_PREFIX}-ssh-${name}:latest
++          done
++
++  # ---- P3 : scan de vulnérabilités des images ---------------------------- #
++  scan-image:
++    needs: build-images
++    runs-on: ubuntu-latest
++    steps:
++      - name: Scan Trivy (gate sur CRITICAL)
++        uses: aquasecurity/trivy-action@0.28.0
++        with:
++          image-ref: ${{ env.REGISTRY }}/${{ env.IMAGE_PREFIX }}-flask:${{ github.sha }}
++          severity: CRITICAL
++          exit-code: "1"
++          ignore-unfixed: true
++
++  # ---- P2 : déploiement continu sur le cluster --------------------------- #
++  # Ne s'exécute que si le secret KUBECONFIG (contenu de k8s/kubeconfig) est défini.
++  deploy:
++    needs: [lint-manifests, build-images, scan-image]
++    if: github.ref == 'refs/heads/kubernetes'
++    runs-on: ubuntu-latest
++    steps:
++      - uses: actions/checkout@v4
++      - name: Vérifier la présence du kubeconfig
++        id: kube
++        run: |
++          if [ -n "${{ secrets.KUBECONFIG }}" ]; then echo "ready=true" >> "$GITHUB_OUTPUT";
++          else echo "ready=false" >> "$GITHUB_OUTPUT"; echo "KUBECONFIG absent -> déploiement ignoré"; fi
++      - name: Configurer kubectl
++        if: steps.kube.outputs.ready == 'true'
++        run: |
++          mkdir -p ~/.kube && echo "${{ secrets.KUBECONFIG }}" > ~/.kube/config
++      - name: Déployer (apply + image du commit)
++        if: steps.kube.outputs.ready == 'true'
++        run: |
++          kubectl apply -f k8s/00-namespace.yaml -f k8s/rbac.yaml -f k8s/configmap.yaml \
++            -f k8s/postgres-service.yaml -f k8s/postgres-statefulset.yaml \
++            -f k8s/flask-service.yaml -f k8s/flask-deployment.yaml -f k8s/ingress.yaml \
++            -f k8s/expiration-cronjob.yaml -f k8s/reconciler-cronjob.yaml
++          kubectl -n shellter set image deployment/flask \
++            flask=${REGISTRY}/${IMAGE_PREFIX}-flask:${{ github.sha }}
++          kubectl -n shellter rollout status deployment/flask --timeout=120s
+diff --git a/.gitignore b/.gitignore
+index 9f52d74..093359c 100644
+--- a/.gitignore
++++ b/.gitignore
+@@ -24,3 +24,12 @@ Thumbs.db
+ 
+ # Certificats TLS auto-signés générés au déploiement (nginx)
+ nginx/tls/
++
++# Kubernetes — kubeconfig, secrets et certs générés (NE JAMAIS committer)
++k8s/kubeconfig
++k8s/secret.yaml
++tls.crt
++tls.key
++
++# Audit DAST (rapports ZAP générés localement)
++zap/
+diff --git a/app/api.py b/app/api.py
+index c7bad27..2c13aa7 100644
+--- a/app/api.py
++++ b/app/api.py
+@@ -4,6 +4,7 @@ Routes : POST /rent, GET /instances, POST /instances/<id>/stop.
+ Orchestration : Resource Manager choisit un worker -> l'agent crée le conteneur ->
+ statuts pending -> creating -> running (ou error).
+ """
++import os
+ import secrets
+ from datetime import datetime, timezone, timedelta
+ 
+@@ -20,6 +21,9 @@ api_bp = Blueprint("api", __name__)
+ ALLOWED_DURATIONS_MINUTES = {30, 60, 120}
+ SSH_USER = "shellter"
+ 
++# Backend d'orchestration : "agent" (Worker Agent, branche main) ou "k8s" (Kubernetes).
++ORCHESTRATOR = os.getenv("ORCHESTRATOR", "agent")
++
+ 
+ def _instance_payload(instance, worker=None):
+     worker = worker or instance.worker
+@@ -69,6 +73,10 @@ def rent():
+                      "active(s) maximum par utilisateur."),
+         ), 403
+ 
++    # --- orchestration Kubernetes : le scheduler K8s remplace le Resource Manager ---
++    if ORCHESTRATOR == "k8s":
++        return _rent_k8s(distro, duration)
++
+     # --- choix du worker (Resource Manager) ---
+     worker = select_worker()
+     if worker is None:
+@@ -132,6 +140,84 @@ def rent():
+     return jsonify(payload), 201
+ 
+ 
++# --------------------------------------------------------------------------- #
++# Orchestration Kubernetes (branche kubernetes) — remplace agent + resource manager
++# --------------------------------------------------------------------------- #
++def _cluster_worker():
++    """Worker « virtuel » représentant le cluster (le scheduling est délégué à K8s).
++
++    On garde la table workers pour ne pas changer le schéma : toutes les locations K8s
++    sont rattachées à ce worker. L'IP sert d'hôte SSH (NodePort est joignable sur
++    n'importe quel nœud).
++    """
++    worker = Worker.query.filter_by(hostname="k8s-cluster").first()
++    if worker is None:
++        worker = Worker(
++            hostname="k8s-cluster",
++            ip=os.getenv("NODE_IP_FALLBACK", "192.168.56.10"),
++            status="AVAILABLE", cpu=0, memory=0, max_instances=100000,
++            agent_url="k8s://", last_heartbeat=datetime.now(timezone.utc),
++        )
++        db.session.add(worker)
++        db.session.commit()
++    return worker
++
++
++def _ssh_image_for(distro):
++    img = (distro.docker_image or "").lower()
++    if "debian" in img:
++        return os.getenv("SSH_IMAGE_DEBIAN", "ghcr.io/jamaiali/shellter-ssh-debian:latest")
++    if "alpine" in img:
++        return os.getenv("SSH_IMAGE_ALPINE", "ghcr.io/jamaiali/shellter-ssh-alpine:latest")
++    return os.getenv("SSH_IMAGE_UBUNTU", "ghcr.io/jamaiali/shellter-ssh-ubuntu:latest")
++
++
++def _rent_k8s(distro, duration):
++    """Loue via Kubernetes : crée un Deployment(1) + Service NodePort pour le SSH."""
++    from . import k8s_client     # import tardif : la lib kubernetes n'est utile qu'ici
++
++    worker = _cluster_worker()
++    ssh_secret = secrets.token_urlsafe(16)
++    now = datetime.now(timezone.utc)
++
++    instance = Instance(
++        worker_id=worker.id, distribution_id=distro.id, ssh_user=SSH_USER,
++        ssh_secret=encrypt_password(ssh_secret), status="creating",
++    )
++    db.session.add(instance)
++    db.session.flush()
++
++    rental = Rental(
++        user_id=current_user.id, instance_id=instance.id, start_time=now,
++        end_time=now + timedelta(minutes=duration), status="ACTIVE",
++    )
++    db.session.add(rental)
++
++    try:
++        result = k8s_client.create_env(
++            image=_ssh_image_for(distro),
++            instance_id=instance.id,
++            ssh_user=SSH_USER,
++            ssh_secret=ssh_secret,
++            expires_at=rental.end_time.isoformat(),
++        )
++        instance.ssh_port = result["nodeport"]          # NodePort alloué par K8s
++        instance.container_id = result["deployment"]
++        worker.ip = result["node_ip"]                   # IP d'un nœud joignable
++        instance.status = "running"
++        db.session.commit()
++    except k8s_client.K8sError as exc:
++        instance.status = "error"
++        rental.status = "CANCELLED"
++        db.session.commit()
++        return jsonify(error="creation_failed", message=str(exc)), 502
++
++    payload = _instance_payload(instance, worker)
++    payload["rental_id"] = rental.id
++    payload["ssh_password"] = ssh_secret
++    return jsonify(payload), 201
++
++
+ @api_bp.route("/instances", methods=["GET"])
+ @login_required
+ def list_instances():
+@@ -149,7 +235,13 @@ def stop_instance(instance_id):
+         return jsonify(error="not_found"), 404
+ 
+     worker = instance.worker
+-    if instance.container_id and worker is not None:
++    if ORCHESTRATOR == "k8s":
++        from . import k8s_client
++        try:
++            k8s_client.delete_env(instance.id)   # supprime Deployment + Service
++        except k8s_client.K8sError:
++            pass
++    elif instance.container_id and worker is not None:
+         try:
+             agent_client.delete_container(worker, instance.container_id)
+         except agent_client.AgentError:
+diff --git a/app/reconciler.py b/app/reconciler.py
+new file mode 100644
+index 0000000..d1e8dae
+--- /dev/null
++++ b/app/reconciler.py
+@@ -0,0 +1,37 @@
++"""Réconciliateur base ↔ cluster (partie P4, séance K4).
++
++Kubernetes recrée les pods (self-healing) sans prévenir la base. Ce module aligne la
++table `instances` sur l'état réel du cluster : une instance dont le pod est en cours de
++recréation passe `recovering`, revient `running` quand il est prêt, et passe `deleted`
++si son Deployment a disparu.
++"""
++import logging
++
++from .models import db, Instance
++from . import k8s_client
++
++logger = logging.getLogger(__name__)
++
++_RUNNINGISH = ("running", "recovering")
++
++
++def reconcile():
++    """Aligne la base sur l'état du cluster. Retourne le nombre d'instances modifiées."""
++    cluster = {e["instance_id"]: e for e in k8s_client.list_envs()}
++    changed = 0
++    for inst in Instance.query.filter(Instance.status.in_(_RUNNINGISH)).all():
++        env = cluster.get(str(inst.id))
++        if env is None:                       # plus de Deployment -> disparue
++            inst.status = "deleted"
++            changed += 1
++        elif not env["ready"] and inst.status != "recovering":
++            inst.status = "recovering"        # pod en cours de (re)création
++            changed += 1
++            logger.info("instance %s : pod non prêt -> recovering", inst.id)
++        elif env["ready"] and inst.status == "recovering":
++            inst.status = "running"           # pod de nouveau prêt
++            changed += 1
++            logger.info("instance %s : pod rétabli -> running", inst.id)
++    if changed:
++        db.session.commit()
++    return changed
+diff --git a/docs/kubernetes/README-kubernetes.md b/docs/kubernetes/README-kubernetes.md
+new file mode 100644
+index 0000000..7e4dc46
+--- /dev/null
++++ b/docs/kubernetes/README-kubernetes.md
+@@ -0,0 +1,54 @@
++# Shellter sur Kubernetes — déploiement & démo
++
++Guide de la branche `kubernetes` (séance K5, partie P4). Voir aussi
++[`architecture.md`](architecture.md), [`PLAN.md`](PLAN.md) et [`REPARTITION.md`](REPARTITION.md).
++
++## 1. Monter le cluster k3s (séance K1)
++```bash
++cd ansible
++ansible-playbook -i hosts.ini k3s.yml --ask-vault-pass
++# le kubeconfig est déposé dans k8s/kubeconfig
++export KUBECONFIG=$PWD/../k8s/kubeconfig
++kubectl get nodes          # -> 4 nœuds Ready
++```
++
++## 2. Déployer la stack (séances K2/K3/K4)
++```bash
++# secrets (ne pas versionner) + TLS de l'Ingress
++cp k8s/secret.example.yaml k8s/secret.yaml   # puis éditer les valeurs
++openssl req -x509 -nodes -newkey rsa:2048 -days 365 -subj "/CN=shellter.local" \
++  -keyout tls.key -out tls.crt
++
++kubectl apply -f k8s/00-namespace.yaml
++kubectl apply -f k8s/secret.yaml -f k8s/configmap.yaml -f k8s/rbac.yaml
++kubectl -n shellter create secret tls shellter-tls --cert=tls.crt --key=tls.key
++kubectl apply -f k8s/postgres-service.yaml -f k8s/postgres-statefulset.yaml
++kubectl apply -f k8s/flask-service.yaml -f k8s/flask-deployment.yaml -f k8s/ingress.yaml
++kubectl apply -f k8s/expiration-cronjob.yaml -f k8s/reconciler-cronjob.yaml
++```
++Ajouter `192.168.56.10  shellter.local` dans `/etc/hosts`, puis :
++```bash
++curl -k https://shellter.local/health      # -> {"status":"ok","db":"up"}
++```
++
++## 3. Scénario de démo
++1. **Cluster** : `kubectl get nodes` → 4 Ready.
++2. **Location** : se connecter à `https://shellter.local`, louer Ubuntu → la page affiche
++   `ssh shellter@<node-ip> -p <nodeport>` ; `kubectl -n shellter get deploy,svc` montre
++   `env-<id>` + son Service NodePort.
++3. **SSH** : se connecter au conteneur ; `cat /etc/os-release` confirme la distro.
++4. **Self-healing** : `kubectl -n shellter delete pod -l shellter.instance_id=<id>` → le
++   Deployment recrée le pod automatiquement ; le réconciliateur remet l'instance `running`.
++5. **Panne de nœud** : `vagrant halt worker1` → les pods de ce nœud sont reschedulés ailleurs.
++6. **Expiration** : louer 2 min → le CronJob supprime l'env à l'échéance, base cohérente.
++
++## 4. Ce qui change dans le code vs la branche `main`
++- `app/k8s_client.py` **remplace** `agent_client` (crée Deployment + Service NodePort).
++- `/rent` et `/stop` basculent sur K8s quand `ORCHESTRATOR=k8s` (ConfigMap) ; la branche
++  `main` (agent) reste utilisable avec `ORCHESTRATOR=agent`.
++- Quota, prolongation, rôle admin, chiffrement SSH, migrations : **réutilisés tels quels**.
++
++## 5. CI/CD (séance K5)
++`.github/workflows/k8s-ci.yml` : lint `kubeconform` → build & push (Flask + 3 images SSH,
++taguées par SHA) → scan **Trivy** → déploiement `kubectl apply` (si le secret `KUBECONFIG`
++est fourni au dépôt).
+diff --git a/docs/kubernetes/REPARTITION.md b/docs/kubernetes/REPARTITION.md
+new file mode 100644
+index 0000000..b437542
+--- /dev/null
++++ b/docs/kubernetes/REPARTITION.md
+@@ -0,0 +1,40 @@
++# Répartition du travail — branche `kubernetes`
++
++Reprend la matrice de [`PLAN.md`](PLAN.md). Mapping proposé membre ⇄ rôle (à ajuster par
++l'équipe) :
++
++| Rôle (plan) | Membre | Thème |
++|---|---|---|
++| **P1** | **fatihamoltif** | cluster / infra / RBAC / images |
++| **P2** | **YOUSSEF4315** | déploiement de la stack / client K8s |
++| **P3** | **imenmezrigui-sketch** | cycle de vie des pods / expiration / scans |
++| **P4** | **JamaiAli** | orchestration / résilience / doc / CI |
++
++## Fichiers par membre
++
++### P1 — fatihamoltif
++- `ansible/k3s.yml`, `ansible/roles/k3s_server/**`
++- `k8s/rbac.yaml`, `k8s/secret.example.yaml`, `k8s/configmap.yaml`
++- (images SSH : réutilise `docker/ssh/Dockerfile` existant)
++
++### P2 — YOUSSEF4315
++- `ansible/roles/k3s_agent/**`
++- `k8s/postgres-statefulset.yaml`, `k8s/postgres-service.yaml`
++- `app/k8s_client.py`
++
++### P3 — imenmezrigui-sketch
++- `k8s/flask-deployment.yaml`, `k8s/flask-service.yaml`
++- `k8s/expiration-cronjob.yaml`, `scripts/k8s_reaper.py`
++
++### P4 — JamaiAli
++- `k8s/ingress.yaml`, `k8s/env-deployment.template.yaml`
++- `app/api.py` (adaptation `/rent` + `/stop` K8s), `app/reconciler.py`, `scripts/k8s_reconciler.py`
++- `k8s/reconciler-cronjob.yaml`, `requirements.txt` (lib `kubernetes`)
++- `.github/workflows/k8s-ci.yml`, `docs/kubernetes/**`
++
++## Note sur la paternité git (important)
++
++Cette branche a été **prototypée** par Ali (JamaiAli) : tous les commits initiaux sont donc
++à son nom. Pour que l'historique reflète **honnêtement** la contribution de chacun sans
++falsifier l'auteur, chaque membre reprend **sa** partie et la **commite lui-même** depuis sa
++machine (patches fournis par Ali). Un commit = la personne qui l'a réellement fait.
+diff --git a/docs/kubernetes/architecture.md b/docs/kubernetes/architecture.md
+new file mode 100644
+index 0000000..f870aaa
+--- /dev/null
++++ b/docs/kubernetes/architecture.md
+@@ -0,0 +1,66 @@
++# Architecture Kubernetes — Shellter (branche `kubernetes`)
++
++> Cadrage (séance K1, partie P4). Réimplémentation de l'orchestration de Shellter avec
++> **k3s**, en réutilisant les 4 VM Vagrant comme nœuds du cluster. Les briques « maison »
++> (Worker Agent, Resource Manager, reprise sur panne) sont remplacées par les mécanismes
++> **natifs** de Kubernetes.
++
++## Vue d'ensemble
++
++```mermaid
++flowchart TB
++  U[Client] -->|HTTPS 443| ING[Ingress Traefik + TLS]
++  ING --> SVC[Service flask]
++  SVC --> DEP[Deployment flask x2]
++  DEP -->|ServiceAccount + RBAC| API[(API Kubernetes)]
++  DEP --> PG[(Service postgres)]
++  PG --> STS[StatefulSet postgres + PVC]
++  API -->|par location| ENV[Deployment env-ID 1 pod + Service NodePort]
++  U -->|ssh user@node-ip -p nodeport| ENV
++  subgraph CLUSTER["cluster k3s = 4 VM Vagrant"]
++    ING
++    SVC
++    DEP
++    PG
++    STS
++    ENV
++  end
++```
++
++- **controller** (`192.168.56.10`) : nœud **k3s server**.
++- **worker1/2/3** (`.11/.12/.13`) : nœuds **k3s agents**.
++- Une **location** = un **Deployment (1 replica)** + un **Service NodePort** exposant le port 22.
++
++## Correspondance « Shellter maison → Kubernetes »
++
++| Brique maison (main) | Équivalent Kubernetes (cette branche) |
++|---|---|
++| Worker Agent (`agent_client`) | l'**API Kubernetes** (`app/k8s_client.py`) |
++| Resource Manager (`select_worker`) | le **scheduler** k3s |
++| Heartbeat + statut worker | les **nœuds** + `kubelet` + probes |
++| `/rent` → créer un conteneur | créer un **Deployment** + **Service NodePort** |
++| Reprise sur panne (S7) | **re-scheduling natif** (Deployment/ReplicaSet) |
++| Expiration (`end_time`) | **CronJob** de nettoyage (`k8s_reaper.py`) |
++| `docker-compose` du controller | manifests **Deployment / StatefulSet / Service / Ingress** |
++| Chiffrement SSH, quota, admin, migrations | **inchangés** (réutilisés tels quels) |
++
++## Manifests produits (`k8s/`)
++
++| Fichier | Rôle | Partie |
++|---|---|---|
++| `00-namespace.yaml` | namespace `shellter` | — |
++| `rbac.yaml` | ServiceAccount + Role + RoleBinding | P1 |
++| `secret.example.yaml` / `configmap.yaml` | secrets & config | P1 |
++| `postgres-statefulset.yaml` / `postgres-service.yaml` | base persistante | P2 |
++| `flask-deployment.yaml` / `flask-service.yaml` | control plane | P3 |
++| `ingress.yaml` | HTTPS (Traefik + TLS) | P4 |
++| `env-deployment.template.yaml` | gabarit d'une location (généré par `k8s_client`) | P1/P4 |
++| `expiration-cronjob.yaml` | expiration automatique | P3 |
++| `reconciler-cronjob.yaml` | réconciliation base ↔ cluster | P4 |
++
++## Stratégie de test
++- **Statique** : `kubeconform` sur tous les manifests (CI), `kube-score` (conseillé).
++- **Composant** : `kubectl get nodes` (4 Ready), PVC qui survit à la suppression du pod Postgres.
++- **E2E** : `/health` en HTTPS via l'Ingress ; `POST /rent` → `ssh user@<node-ip> -p <nodeport>`.
++- **Résilience** : `kubectl delete pod env-<id>` → recréé ; `vagrant halt worker1` → reschedule.
++- **Expiration** : location courte → CronJob supprime l'env, base cohérente.
+diff --git a/k8s/env-deployment.template.yaml b/k8s/env-deployment.template.yaml
+new file mode 100644
+index 0000000..a11848c
+--- /dev/null
++++ b/k8s/env-deployment.template.yaml
+@@ -0,0 +1,54 @@
++# MODÈLE (séances K3/K4) — ce que k8s_client génère POUR CHAQUE location.
++# Les <...> sont remplis dynamiquement par app/k8s_client.py ; ce fichier sert de
++# référence/documentation (exclu du lint kubeconform car il contient des gabarits).
++#
++# Choix clé (K4) : une location = un DEPLOYMENT (1 replica), pas un Pod nu -> si le
++# pod (ou son nœud) tombe, Kubernetes le RECRÉE automatiquement (self-healing natif,
++# équivalent de la reprise sur panne codée à la main en S7).
++apiVersion: apps/v1
++kind: Deployment
++metadata:
++  name: env-<ID>
++  namespace: shellter
++  labels:
++    app: shellter-env
++    shellter.instance_id: "<ID>"
++    shellter.expires_at: "<EXPIRES_AT>"
++spec:
++  replicas: 1
++  selector:
++    matchLabels:
++      shellter.instance_id: "<ID>"
++  template:
++    metadata:
++      labels:
++        app: shellter-env
++        shellter.instance_id: "<ID>"
++    spec:
++      containers:
++        - name: ssh
++          image: <IMAGE>            # ex. ghcr.io/jamaiali/shellter-ssh-ubuntu:latest
++          ports:
++            - containerPort: 22
++          env:
++            - name: SSH_USER
++              value: "<USER>"
++            - name: SSH_PASSWORD
++              value: "<SECRET>"     # mot de passe en clair injecté au conteneur uniquement
++---
++apiVersion: v1
++kind: Service
++metadata:
++  name: env-<ID>
++  namespace: shellter
++  labels:
++    app: shellter-env
++    shellter.instance_id: "<ID>"
++spec:
++  type: NodePort
++  selector:
++    shellter.instance_id: "<ID>"
++  ports:
++    - port: 22
++      targetPort: 22
++      nodePort: <NODEPORT>          # plage NodePort : 30000-32767
+diff --git a/k8s/ingress.yaml b/k8s/ingress.yaml
+new file mode 100644
+index 0000000..9baff71
+--- /dev/null
++++ b/k8s/ingress.yaml
+@@ -0,0 +1,29 @@
++# Ingress + TLS (partie P4, séance K2) — expose Flask en HTTPS via Traefik (k3s).
++# Pré-requis : créer le secret TLS (cert auto-signé) —
++#   openssl req -x509 -nodes -newkey rsa:2048 -days 365 -subj "/CN=shellter.local" \
++#     -keyout tls.key -out tls.crt
++#   kubectl -n shellter create secret tls shellter-tls --cert=tls.crt --key=tls.key
++# Puis ajouter "192.168.56.10  shellter.local" dans /etc/hosts.
++apiVersion: networking.k8s.io/v1
++kind: Ingress
++metadata:
++  name: shellter
++  namespace: shellter
++  annotations:
++    traefik.ingress.kubernetes.io/router.entrypoints: websecure
++spec:
++  tls:
++    - hosts:
++        - shellter.local
++      secretName: shellter-tls
++  rules:
++    - host: shellter.local
++      http:
++        paths:
++          - path: /
++            pathType: Prefix
++            backend:
++              service:
++                name: flask
++                port:
++                  number: 80
+diff --git a/k8s/reconciler-cronjob.yaml b/k8s/reconciler-cronjob.yaml
+new file mode 100644
+index 0000000..e745afb
+--- /dev/null
++++ b/k8s/reconciler-cronjob.yaml
+@@ -0,0 +1,36 @@
++# Réconciliation (partie P4, séance K4) — aligne la base sur l'état du cluster.
++apiVersion: batch/v1
++kind: CronJob
++metadata:
++  name: shellter-reconciler
++  namespace: shellter
++spec:
++  schedule: "*/1 * * * *"
++  concurrencyPolicy: Forbid
++  jobTemplate:
++    spec:
++      activeDeadlineSeconds: 120
++      template:
++        spec:
++          serviceAccountName: shellter-api
++          restartPolicy: Never
++          containers:
++            - name: reconciler
++              image: ghcr.io/jamaiali/shellter-flask:latest
++              command: ["python", "scripts/k8s_reconciler.py"]
++              envFrom:
++                - configMapRef:
++                    name: shellter-config
++              env:
++                - name: POSTGRES_PASSWORD
++                  valueFrom:
++                    secretKeyRef:
++                      name: shellter-secrets
++                      key: POSTGRES_PASSWORD
++                - name: DATABASE_URL
++                  value: "postgresql://shellter:$(POSTGRES_PASSWORD)@postgres:5432/shellter"
++                - name: INSTANCE_ENCRYPTION_KEY
++                  valueFrom:
++                    secretKeyRef:
++                      name: shellter-secrets
++                      key: INSTANCE_ENCRYPTION_KEY
+diff --git a/requirements.txt b/requirements.txt
+index 103c2a0..a4ec1fe 100644
+--- a/requirements.txt
++++ b/requirements.txt
+@@ -14,3 +14,5 @@ python-dotenv==1.0.1
+ requests==2.32.3
+ gunicorn==22.0.0
+ cryptography==43.0.1
++# Branche kubernetes : client API K8s (k8s_client.py remplace le Worker Agent).
++kubernetes==30.1.0
+diff --git a/scripts/k8s_reconciler.py b/scripts/k8s_reconciler.py
+new file mode 100644
+index 0000000..836e78e
+--- /dev/null
++++ b/scripts/k8s_reconciler.py
+@@ -0,0 +1,17 @@
++"""Runner du réconciliateur (partie P4, séance K4) — appelé par un CronJob."""
++import logging
++
++from app import create_app
++from app.reconciler import reconcile
++
++logging.basicConfig(level=logging.INFO)
++
++
++def main():
++    app = create_app()
++    with app.app_context():
++        logging.info("%s instance(s) réconciliée(s)", reconcile())
++
++
++if __name__ == "__main__":
++    main()
