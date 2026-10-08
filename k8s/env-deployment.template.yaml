@@ -1,0 +1,54 @@
+# MODÈLE (séances K3/K4) — ce que k8s_client génère POUR CHAQUE location.
+# Les <...> sont remplis dynamiquement par app/k8s_client.py ; ce fichier sert de
+# référence/documentation (exclu du lint kubeconform car il contient des gabarits).
+#
+# Choix clé (K4) : une location = un DEPLOYMENT (1 replica), pas un Pod nu -> si le
+# pod (ou son nœud) tombe, Kubernetes le RECRÉE automatiquement (self-healing natif,
+# équivalent de la reprise sur panne codée à la main en S7).
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: env-<ID>
+  namespace: shellter
+  labels:
+    app: shellter-env
+    shellter.instance_id: "<ID>"
+    shellter.expires_at: "<EXPIRES_AT>"
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      shellter.instance_id: "<ID>"
+  template:
+    metadata:
+      labels:
+        app: shellter-env
+        shellter.instance_id: "<ID>"
+    spec:
+      containers:
+        - name: ssh
+          image: <IMAGE>            # ex. ghcr.io/jamaiali/shellter-ssh-ubuntu:latest
+          ports:
+            - containerPort: 22
+          env:
+            - name: SSH_USER
+              value: "<USER>"
+            - name: SSH_PASSWORD
+              value: "<SECRET>"     # mot de passe en clair injecté au conteneur uniquement
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: env-<ID>
+  namespace: shellter
+  labels:
+    app: shellter-env
+    shellter.instance_id: "<ID>"
+spec:
+  type: NodePort
+  selector:
+    shellter.instance_id: "<ID>"
+  ports:
+    - port: 22
+      targetPort: 22
+      nodePort: <NODEPORT>          # plage NodePort : 30000-32767

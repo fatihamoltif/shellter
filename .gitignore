@@ -24,3 +24,12 @@ Thumbs.db
 
 # Certificats TLS auto-signés générés au déploiement (nginx)
 nginx/tls/
+
+# Kubernetes — kubeconfig, secrets et certs générés (NE JAMAIS committer)
+k8s/kubeconfig
+k8s/secret.yaml
+tls.crt
+tls.key
+
+# Audit DAST (rapports ZAP générés localement)
+zap/

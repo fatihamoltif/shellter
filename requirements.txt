@@ -14,3 +14,5 @@ python-dotenv==1.0.1
 requests==2.32.3
 gunicorn==22.0.0
 cryptography==43.0.1
+# Branche kubernetes : client API K8s (k8s_client.py remplace le Worker Agent).
+kubernetes==30.1.0

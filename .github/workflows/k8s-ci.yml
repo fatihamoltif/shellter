@@ -1,0 +1,106 @@
+name: CI Kubernetes
+
+# Pipeline de la branche kubernetes (séance K5) :
+#   lint des manifests (P3) -> build & push des images (P1) -> scan Trivy (P3)
+#   -> déploiement sur le cluster (P2, seulement si le secret KUBECONFIG est fourni).
+
+on:
+  push:
+    branches: [kubernetes]
+  pull_request:
+    branches: [kubernetes]
+
+env:
+  REGISTRY: ghcr.io
+  IMAGE_PREFIX: ${{ github.repository_owner }}/shellter
+
+jobs:
+  # ---- P3 : conformité des manifests ------------------------------------- #
+  lint-manifests:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Installer kubeconform
+        run: |
+          curl -sSLo kubeconform.tar.gz https://github.com/yannh/kubeconform/releases/download/v0.6.7/kubeconform-linux-amd64.tar.gz
+          tar xf kubeconform.tar.gz && sudo mv kubeconform /usr/local/bin/
+      - name: Valider les manifests (hors gabarits *.template.yaml)
+        run: |
+          find k8s -name '*.yaml' ! -name '*.template.yaml' -print0 \
+            | xargs -0 kubeconform -strict -ignore-missing-schemas -summary
+
+  # ---- P1 : build & push des images (Flask + 3 distros SSH) -------------- #
+  build-images:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+    steps:
+      - uses: actions/checkout@v4
+      - uses: docker/setup-buildx-action@v3
+      - name: Login GHCR
+        uses: docker/login-action@v3
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+      - name: Build & push image Flask
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: docker/Dockerfile
+          push: true
+          tags: |
+            ${{ env.REGISTRY }}/${{ env.IMAGE_PREFIX }}-flask:${{ github.sha }}
+            ${{ env.REGISTRY }}/${{ env.IMAGE_PREFIX }}-flask:latest
+      - name: Build & push images SSH (ubuntu / debian / alpine)
+        run: |
+          for d in "ubuntu:24.04:ubuntu" "debian:13:debian" "alpine:latest:alpine"; do
+            base="${d%:*}"; name="${d##*:}"
+            docker build --build-arg BASE="$base" \
+              -t ${REGISTRY}/${IMAGE_PREFIX}-ssh-${name}:${{ github.sha }} \
+              -t ${REGISTRY}/${IMAGE_PREFIX}-ssh-${name}:latest docker/ssh
+            docker push ${REGISTRY}/${IMAGE_PREFIX}-ssh-${name}:${{ github.sha }}
+            docker push ${REGISTRY}/${IMAGE_PREFIX}-ssh-${name}:latest
+          done
+
+  # ---- P3 : scan de vulnérabilités des images ---------------------------- #
+  scan-image:
+    needs: build-images
+    runs-on: ubuntu-latest
+    steps:
+      - name: Scan Trivy (gate sur CRITICAL)
+        uses: aquasecurity/trivy-action@0.28.0
+        with:
+          image-ref: ${{ env.REGISTRY }}/${{ env.IMAGE_PREFIX }}-flask:${{ github.sha }}
+          severity: CRITICAL
+          exit-code: "1"
+          ignore-unfixed: true
+
+  # ---- P2 : déploiement continu sur le cluster --------------------------- #
+  # Ne s'exécute que si le secret KUBECONFIG (contenu de k8s/kubeconfig) est défini.
+  deploy:
+    needs: [lint-manifests, build-images, scan-image]
+    if: github.ref == 'refs/heads/kubernetes'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Vérifier la présence du kubeconfig
+        id: kube
+        run: |
+          if [ -n "${{ secrets.KUBECONFIG }}" ]; then echo "ready=true" >> "$GITHUB_OUTPUT";
+          else echo "ready=false" >> "$GITHUB_OUTPUT"; echo "KUBECONFIG absent -> déploiement ignoré"; fi
+      - name: Configurer kubectl
+        if: steps.kube.outputs.ready == 'true'
+        run: |
+          mkdir -p ~/.kube && echo "${{ secrets.KUBECONFIG }}" > ~/.kube/config
+      - name: Déployer (apply + image du commit)
+        if: steps.kube.outputs.ready == 'true'
+        run: |
+          kubectl apply -f k8s/00-namespace.yaml -f k8s/rbac.yaml -f k8s/configmap.yaml \
+            -f k8s/postgres-service.yaml -f k8s/postgres-statefulset.yaml \
+            -f k8s/flask-service.yaml -f k8s/flask-deployment.yaml -f k8s/ingress.yaml \
+            -f k8s/expiration-cronjob.yaml -f k8s/reconciler-cronjob.yaml
+          kubectl -n shellter set image deployment/flask \
+            flask=${REGISTRY}/${IMAGE_PREFIX}-flask:${{ github.sha }}
+          kubectl -n shellter rollout status deployment/flask --timeout=120s

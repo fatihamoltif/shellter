@@ -4,6 +4,7 @@ Routes : POST /rent, GET /instances, POST /instances/<id>/stop.
 Orchestration : Resource Manager choisit un worker -> l'agent crée le conteneur ->
 statuts pending -> creating -> running (ou error).
 """
+import os
 import secrets
 from datetime import datetime, timezone, timedelta
 
@@ -19,6 +20,9 @@ api_bp = Blueprint("api", __name__)
 
 ALLOWED_DURATIONS_MINUTES = {30, 60, 120}
 SSH_USER = "shellter"
+
+# Backend d'orchestration : "agent" (Worker Agent, branche main) ou "k8s" (Kubernetes).
+ORCHESTRATOR = os.getenv("ORCHESTRATOR", "agent")
 
 
 def _instance_payload(instance, worker=None):
@@ -68,6 +72,10 @@ def rent():
             message=(f"Quota atteint : {current_user.max_instances} instance(s) "
                      "active(s) maximum par utilisateur."),
         ), 403
+
+    # --- orchestration Kubernetes : le scheduler K8s remplace le Resource Manager ---
+    if ORCHESTRATOR == "k8s":
+        return _rent_k8s(distro, duration)
 
     # --- choix du worker (Resource Manager) ---
     worker = select_worker()
@@ -132,6 +140,84 @@ def rent():
     return jsonify(payload), 201
 
 
+# --------------------------------------------------------------------------- #
+# Orchestration Kubernetes (branche kubernetes) — remplace agent + resource manager
+# --------------------------------------------------------------------------- #
+def _cluster_worker():
+    """Worker « virtuel » représentant le cluster (le scheduling est délégué à K8s).
+
+    On garde la table workers pour ne pas changer le schéma : toutes les locations K8s
+    sont rattachées à ce worker. L'IP sert d'hôte SSH (NodePort est joignable sur
+    n'importe quel nœud).
+    """
+    worker = Worker.query.filter_by(hostname="k8s-cluster").first()
+    if worker is None:
+        worker = Worker(
+            hostname="k8s-cluster",
+            ip=os.getenv("NODE_IP_FALLBACK", "192.168.56.10"),
+            status="AVAILABLE", cpu=0, memory=0, max_instances=100000,
+            agent_url="k8s://", last_heartbeat=datetime.now(timezone.utc),
+        )
+        db.session.add(worker)
+        db.session.commit()
+    return worker
+
+
+def _ssh_image_for(distro):
+    img = (distro.docker_image or "").lower()
+    if "debian" in img:
+        return os.getenv("SSH_IMAGE_DEBIAN", "ghcr.io/jamaiali/shellter-ssh-debian:latest")
+    if "alpine" in img:
+        return os.getenv("SSH_IMAGE_ALPINE", "ghcr.io/jamaiali/shellter-ssh-alpine:latest")
+    return os.getenv("SSH_IMAGE_UBUNTU", "ghcr.io/jamaiali/shellter-ssh-ubuntu:latest")
+
+
+def _rent_k8s(distro, duration):
+    """Loue via Kubernetes : crée un Deployment(1) + Service NodePort pour le SSH."""
+    from . import k8s_client     # import tardif : la lib kubernetes n'est utile qu'ici
+
+    worker = _cluster_worker()
+    ssh_secret = secrets.token_urlsafe(16)
+    now = datetime.now(timezone.utc)
+
+    instance = Instance(
+        worker_id=worker.id, distribution_id=distro.id, ssh_user=SSH_USER,
+        ssh_secret=encrypt_password(ssh_secret), status="creating",
+    )
+    db.session.add(instance)
+    db.session.flush()
+
+    rental = Rental(
+        user_id=current_user.id, instance_id=instance.id, start_time=now,
+        end_time=now + timedelta(minutes=duration), status="ACTIVE",
+    )
+    db.session.add(rental)
+
+    try:
+        result = k8s_client.create_env(
+            image=_ssh_image_for(distro),
+            instance_id=instance.id,
+            ssh_user=SSH_USER,
+            ssh_secret=ssh_secret,
+            expires_at=rental.end_time.isoformat(),
+        )
+        instance.ssh_port = result["nodeport"]          # NodePort alloué par K8s
+        instance.container_id = result["deployment"]
+        worker.ip = result["node_ip"]                   # IP d'un nœud joignable
+        instance.status = "running"
+        db.session.commit()
+    except k8s_client.K8sError as exc:
+        instance.status = "error"
+        rental.status = "CANCELLED"
+        db.session.commit()
+        return jsonify(error="creation_failed", message=str(exc)), 502
+
+    payload = _instance_payload(instance, worker)
+    payload["rental_id"] = rental.id
+    payload["ssh_password"] = ssh_secret
+    return jsonify(payload), 201
+
+
 @api_bp.route("/instances", methods=["GET"])
 @login_required
 def list_instances():
@@ -149,7 +235,13 @@ def stop_instance(instance_id):
         return jsonify(error="not_found"), 404
 
     worker = instance.worker
-    if instance.container_id and worker is not None:
+    if ORCHESTRATOR == "k8s":
+        from . import k8s_client
+        try:
+            k8s_client.delete_env(instance.id)   # supprime Deployment + Service
+        except k8s_client.K8sError:
+            pass
+    elif instance.container_id and worker is not None:
         try:
             agent_client.delete_container(worker, instance.container_id)
         except agent_client.AgentError:

@@ -1,0 +1,54 @@
+# Shellter sur Kubernetes — déploiement & démo
+
+Guide de la branche `kubernetes` (séance K5, partie P4). Voir aussi
+[`architecture.md`](architecture.md), [`PLAN.md`](PLAN.md) et [`REPARTITION.md`](REPARTITION.md).
+
+## 1. Monter le cluster k3s (séance K1)
+```bash
+cd ansible
+ansible-playbook -i hosts.ini k3s.yml --ask-vault-pass
+# le kubeconfig est déposé dans k8s/kubeconfig
+export KUBECONFIG=$PWD/../k8s/kubeconfig
+kubectl get nodes          # -> 4 nœuds Ready
+```
+
+## 2. Déployer la stack (séances K2/K3/K4)
+```bash
+# secrets (ne pas versionner) + TLS de l'Ingress
+cp k8s/secret.example.yaml k8s/secret.yaml   # puis éditer les valeurs
+openssl req -x509 -nodes -newkey rsa:2048 -days 365 -subj "/CN=shellter.local" \
+  -keyout tls.key -out tls.crt
+
+kubectl apply -f k8s/00-namespace.yaml
+kubectl apply -f k8s/secret.yaml -f k8s/configmap.yaml -f k8s/rbac.yaml
+kubectl -n shellter create secret tls shellter-tls --cert=tls.crt --key=tls.key
+kubectl apply -f k8s/postgres-service.yaml -f k8s/postgres-statefulset.yaml
+kubectl apply -f k8s/flask-service.yaml -f k8s/flask-deployment.yaml -f k8s/ingress.yaml
+kubectl apply -f k8s/expiration-cronjob.yaml -f k8s/reconciler-cronjob.yaml
+```
+Ajouter `192.168.56.10  shellter.local` dans `/etc/hosts`, puis :
+```bash
+curl -k https://shellter.local/health      # -> {"status":"ok","db":"up"}
+```
+
+## 3. Scénario de démo
+1. **Cluster** : `kubectl get nodes` → 4 Ready.
+2. **Location** : se connecter à `https://shellter.local`, louer Ubuntu → la page affiche
+   `ssh shellter@<node-ip> -p <nodeport>` ; `kubectl -n shellter get deploy,svc` montre
+   `env-<id>` + son Service NodePort.
+3. **SSH** : se connecter au conteneur ; `cat /etc/os-release` confirme la distro.
+4. **Self-healing** : `kubectl -n shellter delete pod -l shellter.instance_id=<id>` → le
+   Deployment recrée le pod automatiquement ; le réconciliateur remet l'instance `running`.
+5. **Panne de nœud** : `vagrant halt worker1` → les pods de ce nœud sont reschedulés ailleurs.
+6. **Expiration** : louer 2 min → le CronJob supprime l'env à l'échéance, base cohérente.
+
+## 4. Ce qui change dans le code vs la branche `main`
+- `app/k8s_client.py` **remplace** `agent_client` (crée Deployment + Service NodePort).
+- `/rent` et `/stop` basculent sur K8s quand `ORCHESTRATOR=k8s` (ConfigMap) ; la branche
+  `main` (agent) reste utilisable avec `ORCHESTRATOR=agent`.
+- Quota, prolongation, rôle admin, chiffrement SSH, migrations : **réutilisés tels quels**.
+
+## 5. CI/CD (séance K5)
+`.github/workflows/k8s-ci.yml` : lint `kubeconform` → build & push (Flask + 3 images SSH,
+taguées par SHA) → scan **Trivy** → déploiement `kubectl apply` (si le secret `KUBECONFIG`
+est fourni au dépôt).
