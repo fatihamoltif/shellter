@@ -1,0 +1,24 @@
+---
+# k3s.yml — Monte le cluster k3s sur les 4 VM Vagrant (séance K1).
+#   - controller : k3s server   (rôle k3s_server, partie P1)
+#   - workers    : k3s agents    (rôle k3s_agent,  partie P2)
+#
+# Lancement :  cd ansible && ansible-playbook -i hosts.ini k3s.yml --ask-vault-pass
+# Preuve de fin : `kubectl get nodes` -> 4 nœuds Ready.
+
+- name: Cluster k3s — serveur (controller)
+  hosts: controller
+  become: true
+  roles:
+    - k3s_server
+
+- name: Cluster k3s — agents (workers)
+  hosts: workers
+  become: true
+  vars:
+    # Le token et l'IP du serveur viennent du play précédent (hostvars du controller).
+    k3s_token: "{{ hostvars[groups['controller'][0]].k3s_token }}"
+    k3s_server_ip: "{{ hostvars[groups['controller'][0]].ansible_host }}"
+    k3s_node_ip: "{{ ansible_host }}"
+  roles:
+    - k3s_agent

@@ -1,0 +1,51 @@
+---
+# Rôle k3s_server (partie P1) — installe le serveur k3s sur le controller,
+# récupère le token (pour les agents) et le kubeconfig (pour le poste).
+
+- name: Installer k3s en mode server
+  ansible.builtin.shell: |
+    curl -sfL https://get.k3s.io | sh -s - server \
+      --node-ip {{ k3s_node_ip }} \
+      --tls-san {{ k3s_node_ip }} \
+      --write-kubeconfig-mode 644
+  args:
+    creates: /usr/local/bin/k3s
+
+- name: Attendre que le node-token soit généré
+  ansible.builtin.wait_for:
+    path: /var/lib/rancher/k3s/server/node-token
+    timeout: 120
+
+- name: Lire le node-token
+  ansible.builtin.slurp:
+    src: /var/lib/rancher/k3s/server/node-token
+  register: k3s_token_b64
+
+- name: Exposer le token aux autres plays (agents)
+  ansible.builtin.set_fact:
+    k3s_token: "{{ k3s_token_b64.content | b64decode | trim }}"
+
+- name: Attendre que l'API Kubernetes réponde
+  ansible.builtin.command: k3s kubectl get nodes
+  register: k3s_nodes
+  changed_when: false
+  retries: 24
+  delay: 5
+  until: k3s_nodes.rc == 0
+
+- name: S'assurer que le dossier k8s existe (dépôt synchronisé)
+  ansible.builtin.file:
+    path: "{{ k3s_kubeconfig_dest | dirname }}"
+    state: directory
+    mode: "0755"
+
+- name: Récupérer le kubeconfig (IP du controller au lieu de 127.0.0.1)
+  ansible.builtin.slurp:
+    src: /etc/rancher/k3s/k3s.yaml
+  register: kubeconfig_b64
+
+- name: Déposer le kubeconfig utilisable depuis le poste
+  ansible.builtin.copy:
+    content: "{{ kubeconfig_b64.content | b64decode | replace('127.0.0.1', k3s_node_ip) }}"
+    dest: "{{ k3s_kubeconfig_dest }}"
+    mode: "0600"

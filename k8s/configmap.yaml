@@ -1,0 +1,20 @@
+# ConfigMap (partie P1, séance K2) — variables non secrètes de l'application.
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: shellter-config
+  namespace: shellter
+data:
+  FLASK_CONFIG: "production"
+  # DATABASE_URL : le mot de passe est injecté séparément depuis le Secret (voir deployment).
+  DATABASE_HOST: "postgres"
+  DATABASE_NAME: "shellter"
+  DATABASE_USER: "shellter"
+  # Orchestrateur : sur la branche kubernetes, /rent passe par l'API K8s.
+  ORCHESTRATOR: "k8s"
+  # Namespace où créer les environnements loués.
+  SHELLTER_NAMESPACE: "shellter"
+  # Images SSH par distribution (poussées au registre, séance K3/P1).
+  SSH_IMAGE_UBUNTU: "ghcr.io/jamaiali/shellter-ssh-ubuntu:latest"
+  SSH_IMAGE_DEBIAN: "ghcr.io/jamaiali/shellter-ssh-debian:latest"
+  SSH_IMAGE_ALPINE: "ghcr.io/jamaiali/shellter-ssh-alpine:latest"

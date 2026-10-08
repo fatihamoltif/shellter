@@ -1,0 +1,35 @@
+# RBAC (partie P1, séance K3) — droits minimaux pour que Flask pilote le cluster.
+# Le Deployment Flask tourne sous ce ServiceAccount ; il peut créer/supprimer les
+# Deployments + Services des locations, mais rien d'autre (moindre privilège).
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: shellter-api
+  namespace: shellter
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: shellter-api
+  namespace: shellter
+rules:
+  - apiGroups: [""]
+    resources: ["pods", "pods/log", "services"]
+    verbs: ["get", "list", "watch", "create", "delete"]
+  - apiGroups: ["apps"]
+    resources: ["deployments"]
+    verbs: ["get", "list", "watch", "create", "delete"]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: shellter-api
+  namespace: shellter
+subjects:
+  - kind: ServiceAccount
+    name: shellter-api
+    namespace: shellter
+roleRef:
+  kind: Role
+  name: shellter-api
+  apiGroup: rbac.authorization.k8s.io
