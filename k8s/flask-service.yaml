@@ -1,0 +1,13 @@
+# Service Flask (partie P3, séance K2) — ClusterIP ciblé par l'Ingress.
+apiVersion: v1
+kind: Service
+metadata:
+  name: flask
+  namespace: shellter
+spec:
+  selector:
+    app: flask
+  ports:
+    - name: http
+      port: 80
+      targetPort: 5000

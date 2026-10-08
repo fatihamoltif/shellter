@@ -1,0 +1,37 @@
+# Expiration (partie P3, séance K4) — CronJob qui supprime les locations échues.
+# Tourne sous shellter-api (droits de suppression Deployment/Service).
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: shellter-reaper
+  namespace: shellter
+spec:
+  schedule: "*/1 * * * *"         # toutes les minutes
+  concurrencyPolicy: Forbid
+  jobTemplate:
+    spec:
+      activeDeadlineSeconds: 120
+      template:
+        spec:
+          serviceAccountName: shellter-api
+          restartPolicy: Never
+          containers:
+            - name: reaper
+              image: ghcr.io/jamaiali/shellter-flask:latest
+              command: ["python", "scripts/k8s_reaper.py"]
+              envFrom:
+                - configMapRef:
+                    name: shellter-config
+              env:
+                - name: POSTGRES_PASSWORD
+                  valueFrom:
+                    secretKeyRef:
+                      name: shellter-secrets
+                      key: POSTGRES_PASSWORD
+                - name: DATABASE_URL
+                  value: "postgresql://shellter:$(POSTGRES_PASSWORD)@postgres:5432/shellter"
+                - name: INSTANCE_ENCRYPTION_KEY
+                  valueFrom:
+                    secretKeyRef:
+                      name: shellter-secrets
+                      key: INSTANCE_ENCRYPTION_KEY
