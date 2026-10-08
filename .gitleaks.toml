@@ -4,9 +4,14 @@ title = "Configuration gitleaks — Shellter"
 useDefault = true
 
 [allowlist]
-description = "Documentation contenant des exemples de secrets (pédagogie S9)"
-# docs/securite.md montre une fausse clé AWS en exemple -> ne pas la traiter comme une fuite.
+description = "Fichiers d'exemple / de démo contenant des valeurs non sensibles"
+# Valeurs d'exemple ou de démonstration, jamais de secrets de production :
+#  - docs/securite.md       : fausse clé AWS pédagogique (S9)
+#  - docs/demo-ssh-reel.md   : mot de passe d'un conteneur de démo (éphémère, détruit)
+#  - k8s/secret.example.yaml : MODÈLE de Secret (clé/mot de passe dev, remplacés en prod)
 # Les secrets réels dans le code (app/, scripts/...) restent, eux, détectés.
 paths = [
   '''docs/securite\.md''',
+  '''docs/demo-ssh-reel\.md''',
+  '''k8s/secret\.example\.yaml''',
 ]
