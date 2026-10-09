@@ -3,6 +3,24 @@
 Guide de la branche `kubernetes` (séance K5, partie P4). Voir aussi
 [`architecture.md`](architecture.md), [`PLAN.md`](PLAN.md) et [`REPARTITION.md`](REPARTITION.md).
 
+> ## État de la branche
+> **Code complet et validé par la CI** (lint des manifests `kubeconform`, build + push
+> des images, scan Trivy, tests unitaires — tous verts). Réimplémentation entière de
+> l'orchestration avec k3s : manifests, client API Kubernetes (`app/k8s_client.py`),
+> RBAC, Ingress HTTPS, self-healing natif, expiration par CronJob, CI dédiée.
+>
+> **Déploiement sur cluster réel : non réalisé.** Pas pour une raison de code, mais de
+> **ressources** : un cluster k3s à 4 nœuds (serveur API + etcd + agents + pods) ne tient
+> pas sur nos VM Vagrant de dev (hôte 16 Go qui sature/swappe → l'API k3s n'arrive pas à
+> démarrer). La **démonstration live** de Shellter se fait donc sur la branche **`main`**
+> (location → vrai conteneur → SSH réel, self-healing, expiration, HTTPS — testée de bout
+> en bout). La présente branche vaut comme **preuve de conception** : elle montre que
+> l'architecture « maison » correspond bien aux mécanismes natifs de Kubernetes (voir le
+> tableau de mapping dans [`architecture.md`](architecture.md)).
+>
+> Les étapes ci-dessous sont la **procédure de déploiement** prévue, à exécuter sur un
+> cluster suffisamment dimensionné.
+
 ## 1. Monter le cluster k3s (séance K1)
 ```bash
 cd ansible
