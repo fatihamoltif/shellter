@@ -58,9 +58,26 @@ flowchart TB
 | `expiration-cronjob.yaml` | expiration automatique | P3 |
 | `reconciler-cronjob.yaml` | réconciliation base ↔ cluster | P4 |
 
+## Choix de conception
+- Une **location = un Deployment (1 replica)**, pas un Pod nu → si le pod ou son nœud
+  tombe, Kubernetes le recrée (self-healing natif, équivalent de la reprise sur panne S7).
+- La date d'expiration est stockée en **annotation** `shellter.expires_at`, **pas en label** :
+  les valeurs de label K8s interdisent `:` et `+`, présents dans les dates ISO.
+- Les images sont publiées au registre par la CI (`ghcr.io/<owner>/shellter-*`) ; un
+  **imagePullSecret** est nécessaire côté cluster si le package est privé.
+
 ## Stratégie de test
-- **Statique** : `kubeconform` sur tous les manifests (CI), `kube-score` (conseillé).
-- **Composant** : `kubectl get nodes` (4 Ready), PVC qui survit à la suppression du pod Postgres.
+
+**Vérifié aujourd'hui — sans cluster, CI verte :**
+- `kubeconform` sur tous les manifests (lint des schémas Kubernetes).
+- Build + push des images (Flask + 3 distros SSH) et scan **Trivy** (gate CRITICAL).
+- Tests unitaires de l'application : `pytest -q` → **55 tests**.
+
+**Sur un cluster — procédure (voir [`README-kubernetes.md`](README-kubernetes.md)) :**
+- **Composant** : `kubectl get nodes` (4 Ready) ; PVC qui survit à la suppression du pod Postgres.
 - **E2E** : `/health` en HTTPS via l'Ingress ; `POST /rent` → `ssh user@<node-ip> -p <nodeport>`.
 - **Résilience** : `kubectl delete pod env-<id>` → recréé ; `vagrant halt worker1` → reschedule.
 - **Expiration** : location courte → CronJob supprime l'env, base cohérente.
+
+> Le déploiement sur cluster réel n'a pas été réalisé sur le matériel de dev (contraintes
+> RAM) ; voir la note d'état dans [`README-kubernetes.md`](README-kubernetes.md).
