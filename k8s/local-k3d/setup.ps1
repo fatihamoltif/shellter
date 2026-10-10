@@ -4,12 +4,16 @@
 #     .\k8s\local-k3d\setup.ps1
 $ErrorActionPreference = "Stop"
 
-# --- localiser k3d ---
-$k3d = (Get-Command k3d -ErrorAction SilentlyContinue).Source
-if (-not $k3d) { $k3d = "$env:LOCALAPPDATA\k3d\k3d.exe" }
+# --- localiser k3d (chemin connu en priorite, sinon PATH) ---
+$k3d = "$env:LOCALAPPDATA\k3d\k3d.exe"
 if (-not (Test-Path $k3d)) {
-  throw "k3d introuvable. Telecharge k3d-windows-amd64.exe depuis https://github.com/k3d-io/k3d/releases"
+  $cmd = Get-Command k3d -ErrorAction SilentlyContinue
+  if ($cmd) { $k3d = $cmd.Source }
 }
+if (-not (Test-Path $k3d)) {
+  throw "k3d introuvable. Telecharge k3d-windows-amd64.exe depuis https://github.com/k3d-io/k3d/releases et place-le dans $env:LOCALAPPDATA\k3d\k3d.exe"
+}
+Write-Host "k3d : $k3d" -ForegroundColor DarkGray
 
 Write-Host "== 1/4  Cluster k3d 'shellter' ==" -ForegroundColor Cyan
 $exists = (& $k3d cluster list 2>$null | Select-String "^shellter\s")
