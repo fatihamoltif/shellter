@@ -1,12 +1,11 @@
-# Expiration (partie P3, séance K4) — CronJob qui supprime les locations échues.
-# Tourne sous shellter-api (droits de suppression Deployment/Service).
+# CronJob d'expiration pour la démo locale k3d (image locale + PYTHONPATH).
 apiVersion: batch/v1
 kind: CronJob
 metadata:
   name: shellter-reaper
   namespace: shellter
 spec:
-  schedule: "*/1 * * * *"         # toutes les minutes
+  schedule: "*/1 * * * *"
   concurrencyPolicy: Forbid
   jobTemplate:
     spec:
@@ -17,13 +16,14 @@ spec:
           restartPolicy: Never
           containers:
             - name: reaper
-              image: ghcr.io/fatihamoltif/shellter-flask:latest
+              image: shellter-flask:local
+              imagePullPolicy: IfNotPresent
               command: ["python", "scripts/k8s_reaper.py"]
               envFrom:
                 - configMapRef:
                     name: shellter-config
               env:
-                - name: PYTHONPATH        # scripts/k8s_reaper.py fait `from app import ...`
+                - name: PYTHONPATH
                   value: "/app"
                 - name: POSTGRES_PASSWORD
                   valueFrom:

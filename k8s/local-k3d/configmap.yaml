@@ -1,0 +1,18 @@
+# ConfigMap pour la démo locale sur k3d (images importées, pas de registre).
+# Diffère du k8s/configmap.yaml : FLASK_CONFIG=development (cookie non-Secure car on
+# accède en HTTP via port-forward) et images SSH en tag :local.
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: shellter-config
+  namespace: shellter
+data:
+  FLASK_CONFIG: "development"
+  DATABASE_HOST: "postgres"
+  DATABASE_NAME: "shellter"
+  DATABASE_USER: "shellter"
+  ORCHESTRATOR: "k8s"
+  SHELLTER_NAMESPACE: "shellter"
+  SSH_IMAGE_UBUNTU: "shellter-ssh-ubuntu:local"
+  SSH_IMAGE_DEBIAN: "shellter-ssh-ubuntu:local"
+  SSH_IMAGE_ALPINE: "shellter-ssh-ubuntu:local"

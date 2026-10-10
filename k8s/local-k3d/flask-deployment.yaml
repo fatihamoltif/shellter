@@ -1,0 +1,57 @@
+# Deployment Flask pour la démo locale k3d : image locale + 2 répliques (démo HA).
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: flask
+  namespace: shellter
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app: flask
+  template:
+    metadata:
+      labels:
+        app: flask
+    spec:
+      serviceAccountName: shellter-api
+      containers:
+        - name: flask
+          image: shellter-flask:local
+          imagePullPolicy: IfNotPresent
+          command: ["python", "docker/start.py"]
+          ports:
+            - containerPort: 5000
+          envFrom:
+            - configMapRef:
+                name: shellter-config
+          env:
+            - name: POSTGRES_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: shellter-secrets
+                  key: POSTGRES_PASSWORD
+            - name: DATABASE_URL
+              value: "postgresql://shellter:$(POSTGRES_PASSWORD)@postgres:5432/shellter"
+            - name: SECRET_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: shellter-secrets
+                  key: SECRET_KEY
+            - name: INSTANCE_ENCRYPTION_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: shellter-secrets
+                  key: INSTANCE_ENCRYPTION_KEY
+          readinessProbe:
+            httpGet:
+              path: /health
+              port: 5000
+            initialDelaySeconds: 10
+            periodSeconds: 5
+          livenessProbe:
+            httpGet:
+              path: /health
+              port: 5000
+            initialDelaySeconds: 20
+            periodSeconds: 10

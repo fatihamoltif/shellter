@@ -22,6 +22,8 @@ spec:
                 - configMapRef:
                     name: shellter-config
               env:
+                - name: PYTHONPATH        # scripts/k8s_reconciler.py fait `from app import ...`
+                  value: "/app"
                 - name: POSTGRES_PASSWORD
                   valueFrom:
                     secretKeyRef:
