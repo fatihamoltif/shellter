@@ -4,14 +4,20 @@
 #     .\k8s\local-k3d\setup.ps1
 $ErrorActionPreference = "Stop"
 
-# --- localiser k3d (chemin connu en priorite, sinon PATH) ---
+# --- localiser / installer k3d ---
 $k3d = "$env:LOCALAPPDATA\k3d\k3d.exe"
 if (-not (Test-Path $k3d)) {
   $cmd = Get-Command k3d -ErrorAction SilentlyContinue
   if ($cmd) { $k3d = $cmd.Source }
 }
 if (-not (Test-Path $k3d)) {
-  throw "k3d introuvable. Telecharge k3d-windows-amd64.exe depuis https://github.com/k3d-io/k3d/releases et place-le dans $env:LOCALAPPDATA\k3d\k3d.exe"
+  Write-Host "k3d absent -> telechargement automatique..." -ForegroundColor Yellow
+  $k3d = "$env:LOCALAPPDATA\k3d\k3d.exe"
+  New-Item -ItemType Directory -Force (Split-Path $k3d) | Out-Null
+  Invoke-WebRequest -Uri "https://github.com/k3d-io/k3d/releases/latest/download/k3d-windows-amd64.exe" -OutFile $k3d -UseBasicParsing
+}
+if (-not (Test-Path $k3d)) {
+  throw "Installation de k3d echouee. Telecharge-le manuellement : https://github.com/k3d-io/k3d/releases"
 }
 Write-Host "k3d : $k3d" -ForegroundColor DarkGray
 
