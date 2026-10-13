@@ -1,0 +1,40 @@
+# CronJob de réconciliation pour la démo locale k3d (image locale + PYTHONPATH).
+# Aligne la base sur l'état réel du cluster (statuts running/recovering/deleted).
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: shellter-reconciler
+  namespace: shellter
+spec:
+  schedule: "*/1 * * * *"
+  concurrencyPolicy: Forbid
+  jobTemplate:
+    spec:
+      activeDeadlineSeconds: 120
+      template:
+        spec:
+          serviceAccountName: shellter-api
+          restartPolicy: Never
+          containers:
+            - name: reconciler
+              image: shellter-flask:local
+              imagePullPolicy: IfNotPresent
+              command: ["python", "scripts/k8s_reconciler.py"]
+              envFrom:
+                - configMapRef:
+                    name: shellter-config
+              env:
+                - name: PYTHONPATH
+                  value: "/app"
+                - name: POSTGRES_PASSWORD
+                  valueFrom:
+                    secretKeyRef:
+                      name: shellter-secrets
+                      key: POSTGRES_PASSWORD
+                - name: DATABASE_URL
+                  value: "postgresql://shellter:$(POSTGRES_PASSWORD)@postgres:5432/shellter"
+                - name: INSTANCE_ENCRYPTION_KEY
+                  valueFrom:
+                    secretKeyRef:
+                      name: shellter-secrets
+                      key: INSTANCE_ENCRYPTION_KEY

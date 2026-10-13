@@ -37,6 +37,7 @@ kubectl apply -f k8s/local-k3d/configmap.yaml
 kubectl apply -f k8s/postgres-service.yaml -f k8s/postgres-statefulset.yaml
 kubectl apply -f k8s/flask-service.yaml -f k8s/local-k3d/flask-deployment.yaml
 kubectl apply -f k8s/local-k3d/expiration-cronjob.yaml
+kubectl apply -f k8s/local-k3d/reconciler-cronjob.yaml
 kubectl -n shellter rollout status deployment/flask --timeout=180s
 
 Write-Host "== 4/4  Pret ! ==" -ForegroundColor Green
